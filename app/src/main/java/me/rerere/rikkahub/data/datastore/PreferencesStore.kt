@@ -151,6 +151,10 @@ class SettingsStore(
 
         // 赞助提醒
         val SPONSOR_ALERT_DISMISSED_AT = intPreferencesKey("sponsor_alert_dismissed_at")
+
+        // 图片压缩
+        val ENABLE_IMAGE_COMPRESSION = booleanPreferencesKey("enable_image_compression")
+        val IMAGE_MAX_DIMENSION = intPreferencesKey("image_max_dimension")
     }
 
     private val dataStore = context.settingsStore
@@ -244,6 +248,8 @@ class SettingsStore(
                 } ?: BackupReminderConfig(),
                 launchCount = preferences[LAUNCH_COUNT] ?: 0,
                 sponsorAlertDismissedAt = preferences[SPONSOR_ALERT_DISMISSED_AT] ?: 0,
+                enableImageCompression = preferences[ENABLE_IMAGE_COMPRESSION] != false,
+                imageMaxDimension = preferences[IMAGE_MAX_DIMENSION] ?: 2048,
             )
         }
         .map {
@@ -412,6 +418,8 @@ class SettingsStore(
             preferences[BACKUP_REMINDER_CONFIG] = JsonInstant.encodeToString(settings.backupReminderConfig)
             preferences[LAUNCH_COUNT] = settings.launchCount
             preferences[SPONSOR_ALERT_DISMISSED_AT] = settings.sponsorAlertDismissedAt
+            preferences[ENABLE_IMAGE_COMPRESSION] = settings.enableImageCompression
+            preferences[IMAGE_MAX_DIMENSION] = settings.imageMaxDimension
         }
     }
 
@@ -556,6 +564,8 @@ data class Settings(
     val backupReminderConfig: BackupReminderConfig = BackupReminderConfig(),
     val launchCount: Int = 0,
     val sponsorAlertDismissedAt: Int = 0,
+    val enableImageCompression: Boolean = true,
+    val imageMaxDimension: Int = 2048,
 ) {
     companion object {
         // 构造一个用于初始化的settings, 但它不能用于保存，防止使用初始值存储

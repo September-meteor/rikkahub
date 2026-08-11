@@ -133,6 +133,7 @@ import okhttp3.OkHttpClient
 import org.koin.android.ext.android.inject
 import org.koin.compose.koinInject
 import kotlin.uuid.Uuid
+import me.rerere.rikkahub.ui.pages.setting.SettingImageCompressionPage
 
 private const val TAG = "RouteActivity"
 
@@ -498,6 +499,10 @@ class RouteActivity : ComponentActivity() {
                                 WorkspacePage()
                             }
 
+                            entry<Screen.ImageCompression> {
+                                SettingImageCompressionPage()
+                            }
+
                             entry<Screen.WorkspaceDetail> { key ->
                                 WorkspaceDetailPage(key.id)
                             }
@@ -697,6 +702,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object QuickMessages : Screen
+
+    @Serializable
+    data object ImageCompression : Screen
 
     @Serializable
     data object Prompts : Screen

@@ -49,7 +49,12 @@ internal fun mapExifOrientationToTransform(orientation: Int): ExifTransformType 
     else -> ExifTransformType.NONE
 }
 
-fun UIMessagePart.Image.encodeBase64(withPrefix: Boolean = true): Result<EncodedImage> = runCatching {
+fun UIMessagePart.Image.encodeBase64(
+    withPrefix: Boolean = true,
+    maxDimension: Int = if (ImageCompressionConfig.enabled) ImageCompressionConfig.maxDimension else Int.MAX_VALUE,
+    maxPixels: Long = if (ImageCompressionConfig.enabled) ImageCompressionConfig.maxDimension.toLong() * ImageCompressionConfig.maxDimension else Long.MAX_VALUE,
+    quality: Int = 85
+): Result<EncodedImage> = runCatching {
     when {
         this.url.startsWith("file://") -> {
             val filePath =
@@ -60,7 +65,12 @@ fun UIMessagePart.Image.encodeBase64(withPrefix: Boolean = true): Result<Encoded
             }
             val mimeType = file.guessMimeType().getOrThrow()
             // 统一进行压缩处理
-            val (encoded, outputMimeType) = file.compressAndEncode(mimeType)
+            val (encoded, outputMimeType) = file.compressAndEncode(
+                mimeType = mimeType,
+                maxDimension = maxDimension,
+                maxPixels = maxPixels,
+                quality = quality
+            )
             EncodedImage(
                 base64 = if (withPrefix) "data:$outputMimeType;base64,$encoded" else encoded,
                 mimeType = outputMimeType
@@ -116,8 +126,8 @@ fun UIMessagePart.Audio.encodeBase64(withPrefix: Boolean = true): Result<String>
 
 private fun File.compressAndEncode(
     mimeType: String,
-    maxDimension: Int = 10_000,
-    maxPixels: Long = 16_000_000L,
+    maxDimension: Int = 2048,
+    maxPixels: Long = 2048L * 2048L,
     quality: Int = 85
 ): Pair<String, String> {
     // GIF 保持原样（可能是动图）
