@@ -687,8 +687,8 @@ private fun OrderedListNode(
         var index = 1
         node.children.fastForEach { child ->
             if (child.type == MarkdownElementTypes.LIST_ITEM) {
-                val numberText =
-                    child.findChildOfTypeRecursive(MarkdownTokenTypes.LIST_NUMBER)?.getTextInNode(content) ?: "$index. "
+                // 只查直接子节点，避免递归到内层列表的编号
+                val numberText = child.children.firstOrNull { it.type == MarkdownTokenTypes.LIST_NUMBER }?.getTextInNode(content) ?: "$index. "
                 ListItemNode(
                     node = child,
                     content = content,
@@ -707,56 +707,44 @@ private fun ListItemNode(
     node: ASTNode, content: String, bulletText: String, onClickCitation: (String) -> Unit = {}, level: Int
 ) {
     Column {
-        // 分离列表项的直接内容和嵌套列表
-        val (directContent, nestedLists) = separateContentAndLists(node)
-        // directContent 渲染处理
-        if (directContent.isNotEmpty()) {
-            Row {
-                Text(
-                    text = bulletText,
-                    modifier = Modifier.alignByBaseline(),
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    itemVerticalAlignment = Alignment.CenterVertically,
-                ) {
-                    directContent.fastForEach { contentChild ->
-                        MarkdownNode(
-                            node = contentChild,
-                            content = content,
-                            onClickCitation = onClickCitation,
-                            listLevel = level,
-                        )
+        Row(
+            verticalAlignment = Alignment.Top,
+            modifier = Modifier.padding(vertical = 2.dp)
+        ) {
+            Text(
+                text = bulletText,
+                modifier = Modifier.alignByBaseline(),
+                color = MaterialTheme.colorScheme.primary,
+            )
+            // 使用 Column 让块级内容垂直排列，并在遇到嵌套列表时立即渲染
+            Column(modifier = Modifier.weight(1f)) {
+                node.children.fastForEach { child ->
+                    when (child.type) {
+                        MarkdownElementTypes.UNORDERED_LIST, MarkdownElementTypes.ORDERED_LIST -> {
+                            MarkdownNode(
+                                node = child,
+                                content = content,
+                                onClickCitation = onClickCitation,
+                                listLevel = level + 1
+                            )
+                        }
+                        // 跳过列表标记和空白符，避免重复渲染
+                        MarkdownTokenTypes.LIST_NUMBER, MarkdownTokenTypes.LIST_BULLET, MarkdownTokenTypes.WHITE_SPACE -> {
+                            /* skip */
+                        }
+                        else -> {
+                            MarkdownNode(
+                                node = child,
+                                content = content,
+                                onClickCitation = onClickCitation,
+                                listLevel = level,
+                            )
+                        }
                     }
                 }
             }
         }
-        // nestedLists 渲染处理
-        nestedLists.fastForEach { nestedList ->
-            MarkdownNode(
-                node = nestedList, content = content, onClickCitation = onClickCitation, listLevel = level + 1 // 增加层级
-            )
-        }
     }
-}
-
-// 分离列表项的直接内容和嵌套列表
-private fun separateContentAndLists(listItemNode: ASTNode): Pair<List<ASTNode>, List<ASTNode>> {
-    val directContent = mutableListOf<ASTNode>()
-    val nestedLists = mutableListOf<ASTNode>()
-    listItemNode.children.fastForEach { child ->
-        when (child.type) {
-            MarkdownElementTypes.UNORDERED_LIST, MarkdownElementTypes.ORDERED_LIST -> {
-                nestedLists.add(child)
-            }
-
-            else -> {
-                directContent.add(child)
-            }
-        }
-    }
-    return directContent to nestedLists
 }
 
 @Composable

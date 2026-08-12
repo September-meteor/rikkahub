@@ -429,6 +429,19 @@ private fun HtmlList(
     }
 }
 
+/**
+ * 判断一个 Element 是否为块级元素。
+ * 用于在列表项中区分块级内容和行内内容，从而正确收集行内节点。
+ */
+private fun isBlockElement(element: Element): Boolean {
+    val blockTags = setOf(
+        "p", "div", "blockquote", "pre", "table", "hr",
+        "h1", "h2", "h3", "h4", "h5", "h6",
+        "ul", "ol", "li", "form", "article", "section", "nav", "aside", "header", "footer", "main"
+    )
+    return element.tagName().lowercase() in blockTags
+}
+
 @Composable
 private fun HtmlListItem(
     item: Element,
@@ -476,50 +489,56 @@ private fun HtmlListItem(
                     )
                 }
 
-                // Item inline content (excluding nested lists and the checkbox input)
+                // 按原始顺序渲染所有子节点，保持文档结构
                 Column(modifier = Modifier.weight(1f)) {
-                    val directContentNodes = item.childNodes().filter { node ->
-                        !(node is Element &&
-                            (node.tagName().lowercase() in listOf("ul", "ol") ||
-                                (node.tagName().lowercase() == "input" && node.attr("type") == "checkbox")))
-                    }
-                    // Group consecutive inline nodes and render as a single paragraph
-                    val groups = mutableListOf<MutableList<Node>>()
-                    directContentNodes.fastForEach { node ->
-                        if (node is Element && node.tagName().lowercase() == "p") {
-                            groups.add(mutableListOf(node))
-                        } else {
-                            val last = groups.lastOrNull()
-                            if (last != null && last.none {
-                                    it is Element && it.tagName().lowercase() == "p"
-                                }) {
-                                last.add(node)
-                            } else {
-                                groups.add(mutableListOf(node))
+                    // 收集连续的 inline 节点，用 HtmlInlineGroup 统一渲染
+                    val inlineNodes = mutableListOf<Node>()
+
+                    item.childNodes().fastForEach { node ->
+                        when {
+                            // 跳过 checkbox input（它本身不是 inline 内容）
+                            node is Element && node.tagName().lowercase() == "input" && node.attr("type") == "checkbox" -> {
+                                // 之前收集的 inline 内容需要先渲染，因为跳过 input 不影响连续性
+                                // 但 input 通常出现在任务列表开头，所以可以在 flush 后跳过
+                                if (inlineNodes.isNotEmpty()) {
+                                    HtmlInlineGroup(nodes = inlineNodes, onClickCitation = onClickCitation)
+                                    inlineNodes.clear()
+                                }
+                                // 不处理 input 本身
+                            }
+                            // 块级元素：先 flush 缓存的 inline，再渲染块级
+                            node is Element && isBlockElement(node) -> {
+                                if (inlineNodes.isNotEmpty()) {
+                                    HtmlInlineGroup(nodes = inlineNodes, onClickCitation = onClickCitation)
+                                    inlineNodes.clear()
+                                }
+                                // 根据具体类型渲染块级
+                                when (node.tagName().lowercase()) {
+                                    "ul", "ol" -> HtmlList(
+                                        element = node,
+                                        ordered = node.tagName().lowercase() == "ol",
+                                        onClickCitation = onClickCitation,
+                                        level = level + 1,
+                                    )
+                                    "p" -> HtmlParagraph(element = node, onClickCitation = onClickCitation)
+                                    else -> HtmlBlockElement(
+                                        element = node,
+                                        onClickCitation = onClickCitation,
+                                        listLevel = level,
+                                    )
+                                }
+                            }
+                            // 其他所有节点（文本、inline 元素等）均收集到缓冲区
+                            else -> {
+                                inlineNodes.add(node)
                             }
                         }
                     }
-                    groups.fastForEach { group ->
-                        val first = group.firstOrNull()
-                        if (first is Element && first.tagName().lowercase() == "p") {
-                            HtmlParagraph(element = first, onClickCitation = onClickCitation)
-                        } else {
-                            HtmlInlineGroup(nodes = group, onClickCitation = onClickCitation)
-                        }
-                    }
-                }
-            }
 
-            // Nested lists
-            item.children().fastForEach { child ->
-                val tag = child.tagName().lowercase()
-                if (tag == "ul" || tag == "ol") {
-                    HtmlList(
-                        element = child,
-                        ordered = tag == "ol",
-                        onClickCitation = onClickCitation,
-                        level = level + 1,
-                    )
+                    // 渲染剩余的 inline 节点
+                    if (inlineNodes.isNotEmpty()) {
+                        HtmlInlineGroup(nodes = inlineNodes, onClickCitation = onClickCitation)
+                    }
                 }
             }
         }
