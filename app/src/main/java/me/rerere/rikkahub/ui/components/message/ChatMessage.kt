@@ -131,6 +131,16 @@ fun ChatMessage(
     val navController = LocalNavController.current
     val context = LocalContext.current
     val colorScheme = MaterialTheme.colorScheme
+
+    // 提取该消息所有原始思维链文本
+    val reasoningText = remember(message) {
+        message.parts
+            .filterIsInstance<UIMessagePart.Reasoning>()
+            .joinToString("\n\n") { it.reasoning }
+            .trim()
+            .takeIf { it.isNotEmpty() }
+    }
+
     Column(
         modifier = modifier.fillMaxWidth(),
         horizontalAlignment = if (message.role == MessageRole.USER) Alignment.End else Alignment.Start,
@@ -148,6 +158,7 @@ fun ChatMessage(
                     model = model,
                     assistant = assistant,
                     loading = loading,
+                    reasoningText = reasoningText,   // 新增
                     modifier = Modifier.weight(1f)
                 )
                 ChatMessageUserAvatar(
