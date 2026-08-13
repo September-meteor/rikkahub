@@ -89,6 +89,7 @@ sealed class UIMessagePart {
         val reasoning: String,
         val createdAt: Instant = Clock.System.now(),
         val finishedAt: Instant? = Clock.System.now(),
+        val translation: String? = null,   // <-- 新增字段
         override var metadata: JsonObject? = null
     ) : UIMessagePart()
 

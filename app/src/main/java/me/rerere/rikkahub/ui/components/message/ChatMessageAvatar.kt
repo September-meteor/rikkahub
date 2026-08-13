@@ -20,6 +20,7 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.isEmptyUIMessage
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Copy01
+import me.rerere.hugeicons.stroke.Translate
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Avatar
@@ -27,6 +28,7 @@ import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.utils.writeClipboardText
+import java.util.Locale
 
 @Composable
 fun ChatMessageUserAvatar(
@@ -65,6 +67,12 @@ fun ChatMessageAssistantAvatar(
     assistant: Assistant?,
     reasoningText: String? = null,
     modifier: Modifier = Modifier,
+    onToggleTranslateReasoning: (() -> Unit)? = null,
+    onSelectReasoningLanguage: (() -> Unit)? = null,
+    targetLanguage: Locale = Locale.getDefault(),
+    showTranslated: Boolean = false,
+    hasTranslation: Boolean = false,
+    isTranslating: Boolean = false,   // <-- 新增参数
 ) {
     val settings = LocalSettings.current
     val showIcon = settings.displaySetting.showModelIcon
@@ -109,6 +117,33 @@ fun ChatMessageAssistantAvatar(
                             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                         )
                     }
+                    // 翻译思维链按钮  // <-- 修改
+                    if (!reasoningText.isNullOrBlank() && onToggleTranslateReasoning != null) {
+                        val tint = when {
+                            isTranslating -> MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)  // 翻译中半透明
+                            hasTranslation -> if (showTranslated) MaterialTheme.colorScheme.primary
+                                              else MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        }
+                        Icon(
+                            imageVector = HugeIcons.Translate,
+                            contentDescription = stringResource(R.string.translate),
+                            modifier = Modifier
+                                .size(16.dp)
+                                .clickable { onToggleTranslateReasoning() },
+                            tint = tint
+                        )
+                    }
+                    // 语言选择按钮（迷你国旗）
+                    if (!reasoningText.isNullOrBlank() && onSelectReasoningLanguage != null) {
+                        Text(
+                            text = targetLanguage.toFlagEmoji(),
+                            modifier = Modifier
+                                .size(16.dp)
+                                .clickable { onSelectReasoningLanguage() },
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
                 }
             } else if (model != null) {
                 if (showIcon) {
@@ -142,8 +177,48 @@ fun ChatMessageAssistantAvatar(
                             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                         )
                     }
+                    // 翻译思维链按钮
+                    if (!reasoningText.isNullOrBlank() && onToggleTranslateReasoning != null) {
+                        val tint = when {
+                            isTranslating -> MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)  // 翻译中半透明
+                            hasTranslation -> if (showTranslated) MaterialTheme.colorScheme.primary
+                                              else MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        }
+                        Icon(
+                            imageVector = HugeIcons.Translate,
+                            contentDescription = stringResource(R.string.translate),
+                            modifier = Modifier
+                                .size(16.dp)
+                                .clickable { onToggleTranslateReasoning() },
+                            tint = tint
+                        )
+                    }
+                    // 语言选择按钮（迷你国旗）
+                    if (!reasoningText.isNullOrBlank() && onSelectReasoningLanguage != null) {
+                        Text(
+                            text = targetLanguage.toFlagEmoji(),
+                            modifier = Modifier
+                                .size(16.dp)
+                                .clickable { onSelectReasoningLanguage() },
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
                 }
             }
         }
     }
+}
+
+private fun Locale.toFlagEmoji(): String = when {
+    this == Locale.SIMPLIFIED_CHINESE || this == Locale.CHINESE -> "🇨🇳"
+    this == Locale.TRADITIONAL_CHINESE || toString() == "zh_TW" -> "🇨🇳"
+    this == Locale.ENGLISH || language == "en" -> "🇺🇸"
+    this == Locale.JAPANESE || language == "ja" -> "🇯🇵"
+    this == Locale.KOREAN || language == "ko" -> "🇰🇷"
+    this == Locale.FRENCH || language == "fr" -> "🇫🇷"
+    this == Locale.GERMAN || language == "de" -> "🇩🇪"
+    this == Locale("es", "ES") || language == "es" -> "🇪🇸"
+    this == Locale.ITALIAN || language == "it" -> "🇮🇹"
+    else -> "🌐"
 }

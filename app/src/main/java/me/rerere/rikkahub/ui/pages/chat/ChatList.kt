@@ -135,6 +135,7 @@ fun ChatList(
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
     onToggleFavorite: ((MessageNode) -> Unit)? = null,
     onConversationSystemPromptChange: ((String?) -> Unit)? = null,
+    onTranslateReasoning: ((UIMessage, java.util.Locale) -> Unit)? = null,
 ) {
     AnimatedContent(
         targetState = previewMode,
@@ -177,6 +178,7 @@ fun ChatList(
                 onToolAnswer = onToolAnswer,
                 onToggleFavorite = onToggleFavorite,
                 onConversationSystemPromptChange = onConversationSystemPromptChange,
+                onTranslateReasoning = onTranslateReasoning, // <-- 新增
             )
         }
     }
@@ -207,6 +209,7 @@ private fun ChatListNormal(
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
     onToggleFavorite: ((MessageNode) -> Unit)? = null,
     onConversationSystemPromptChange: ((String?) -> Unit)? = null,
+    onTranslateReasoning: ((UIMessage, java.util.Locale) -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     val loadingState by rememberUpdatedState(loading)
@@ -364,6 +367,7 @@ private fun ChatListNormal(
                             onToolApproval = onToolApproval,
                             onToolAnswer = onToolAnswer,
                             lastMessage = index == lastMessageIndex,
+                            onTranslateReasoning = onTranslateReasoning, // <-- 新增
                         )
                     }
                 }

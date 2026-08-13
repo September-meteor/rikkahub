@@ -117,6 +117,7 @@ fun ChatMessage(
     onClearTranslation: (UIMessage) -> Unit = {},
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
+    onTranslateReasoning: ((UIMessage, Locale) -> Unit)? = null,
 ) {
     val message = node.messages[node.selectIndex]
     val settings = LocalSettings.current.displaySetting
@@ -132,6 +133,11 @@ fun ChatMessage(
     val context = LocalContext.current
     val colorScheme = MaterialTheme.colorScheme
 
+    // 新增：思维链翻译状态
+    var showTranslatedReasoning by remember { mutableStateOf(false) }
+    var reasoningTargetLang by remember { mutableStateOf(Locale.getDefault()) }
+    var showReasoningLangDialog by remember { mutableStateOf(false) }
+
     // 提取该消息所有原始思维链文本
     val reasoningText = remember(message) {
         message.parts
@@ -139,6 +145,20 @@ fun ChatMessage(
             .joinToString("\n\n") { it.reasoning }
             .trim()
             .takeIf { it.isNotEmpty() }
+    }
+
+    // 提取已有译文（取第一个 Reasoning 的 translation）
+    val reasoningTranslation = remember(message) {
+        message.parts
+            .filterIsInstance<UIMessagePart.Reasoning>()
+            .firstNotNullOfOrNull { it.translation }
+    }
+
+    // <-- 修改：判断是否正在翻译中（translation 为空字符串表示正在翻译）
+    val isReasoningTranslating = remember(message) {
+        message.parts
+            .filterIsInstance<UIMessagePart.Reasoning>()
+            .any { it.translation == "" }
     }
 
     Column(
@@ -158,8 +178,27 @@ fun ChatMessage(
                     model = model,
                     assistant = assistant,
                     loading = loading,
-                    reasoningText = reasoningText,   // 新增
-                    modifier = Modifier.weight(1f)
+                    reasoningText = reasoningText,
+                    modifier = Modifier.weight(1f),
+                    // <-- 修改：优化点击逻辑
+                    onToggleTranslateReasoning = {
+                        if (isReasoningTranslating) {
+                            // 正在翻译中：切换回原文视图
+                            showTranslatedReasoning = false
+                        } else if (reasoningTranslation != null && reasoningTranslation.isNotBlank()) {
+                            // 已有译文：切换原文/译文
+                            showTranslatedReasoning = !showTranslatedReasoning
+                        } else if (!reasoningText.isNullOrBlank()) {
+                            // 没有译文：触发翻译，并立即切换到译文视图
+                            showTranslatedReasoning = true
+                            onTranslateReasoning?.invoke(message, reasoningTargetLang)
+                        }
+                    },
+                    onSelectReasoningLanguage = { showReasoningLangDialog = true },
+                    targetLanguage = reasoningTargetLang,
+                    showTranslated = showTranslatedReasoning,
+                    hasTranslation = reasoningTranslation != null && reasoningTranslation.isNotBlank(),
+                    isTranslating = isReasoningTranslating,   // <-- 修改：传入翻译中状态
                 )
                 ChatMessageUserAvatar(
                     message = message,
@@ -180,6 +219,7 @@ fun ChatMessage(
                 onToolApproval = onToolApproval,
                 onToolAnswer = onToolAnswer,
                 onUserMessageClick = if (message.role == MessageRole.USER) onEdit else null,
+                showTranslatedReasoning = showTranslatedReasoning,
             )
 
             message.translation?.let { translation ->
@@ -270,6 +310,22 @@ fun ChatMessage(
             }
         )
     }
+
+    // 新增：思维链语言选择弹窗
+    if (showReasoningLangDialog) {
+        LanguageSelectionDialog(
+            onLanguageSelected = { language ->
+                reasoningTargetLang = language
+                showReasoningLangDialog = false
+            },
+            onClearTranslation = {
+                showReasoningLangDialog = false
+            },
+            onDismissRequest = {
+                showReasoningLangDialog = false
+            },
+        )
+    }
 }
 
 @OptIn(FlowPreview::class)
@@ -284,6 +340,7 @@ private fun MessagePartsBlock(
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
     onUserMessageClick: (() -> Unit)? = null,
+    showTranslatedReasoning: Boolean = false,
 ) {
     val context = LocalContext.current
     val contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
@@ -346,6 +403,7 @@ private fun MessagePartsBlock(
                                         model = model,
                                         assistant = assistant,
                                         collapsedAdaptiveWidth = isReasoningOnlyBlock,
+                                        showTranslated = showTranslatedReasoning,
                                     )
                                 }
                             }

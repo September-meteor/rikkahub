@@ -7,7 +7,10 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -48,8 +51,10 @@ import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.ui.components.ui.ChainOfThoughtScope
+import me.rerere.rikkahub.ui.components.ui.DotLoading
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.modifier.shimmer
+import me.rerere.rikkahub.ui.components.ui.DotLoading
 import me.rerere.rikkahub.utils.extractThinkingTitle
 import kotlin.time.Clock
 import kotlin.time.Duration
@@ -128,11 +133,19 @@ private fun ReasoningContent(
     scrollState: ScrollState,
     fadeHeight: Float,
     loading: Boolean,
+    showTranslated: Boolean = false,
 ) {
     val isPreview = expandState == ReasoningCardState.Preview
     val reasoningTextStyle = MaterialTheme.typography.bodySmall.copy(
         fontFamily = LocalTextStyle.current.fontFamily,
     )
+    // 根据状态决定显示原文还是译文
+    val displayText = if (showTranslated) {
+        reasoning.translation?.takeIf { it.isNotBlank() } ?: reasoning.reasoning
+    } else {
+        reasoning.reasoning
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -169,7 +182,7 @@ private fun ReasoningContent(
     ) {
         val reasoningContent = @Composable {
             MarkdownBlock(
-                content = reasoning.reasoning.replaceRegexes(
+                content = displayText.replaceRegexes(
                     assistant = assistant,
                     scope = AssistantAffectScope.ASSISTANT,
                     visual = true,
@@ -197,11 +210,15 @@ fun ChainOfThoughtScope.ChatMessageReasoningStep(
     assistant: Assistant?,
     fadeHeight: Float = 64f,
     collapsedAdaptiveWidth: Boolean = false,
+    showTranslated: Boolean = false, // 是否显示译文
 ) {
     val (state, loading) = rememberReasoningState(reasoning)
     val thinkingTitle = reasoning.reasoning.extractThinkingTitle()
     val showThinkingTitle = loading && thinkingTitle != null
     val chatFontFamily = LocalTextStyle.current.fontFamily
+
+    // 判断是否正在翻译中（已请求翻译但译文为空字符串） // <-- 修改
+    val isTranslating = showTranslated && reasoning.translation == ""
 
     ControlledChainOfThoughtStep(
         expanded = state.expandState == ReasoningCardState.Expanded,
@@ -242,18 +259,36 @@ fun ChainOfThoughtScope.ChatMessageReasoningStep(
         collapsedAdaptiveWidth = collapsedAdaptiveWidth,
         contentVisible = state.expandState != ReasoningCardState.Collapsed,
         content = {
-            ReasoningContent(
-                reasoning = reasoning,
-                assistant = assistant,
-                expandState = state.expandState,
-                scrollState = state.scrollState,
-                fadeHeight = fadeHeight,
-                loading = loading,
-            )
+            // 如果处于译文模式且正在翻译中，显示翻译中占位   // <-- 修改
+            if (isTranslating) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    DotLoading(size = 10.dp)
+                    Text(
+                        text = "翻译中...",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            } else {
+                ReasoningContent(
+                    reasoning = reasoning,
+                    assistant = assistant,
+                    expandState = state.expandState,
+                    scrollState = state.scrollState,
+                    fadeHeight = fadeHeight,
+                    loading = loading,
+                    showTranslated = showTranslated,
+                )
+            }
         },
     )
 }
-
 
 @Composable
 private fun ReasoningTitle(title: String) {

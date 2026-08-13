@@ -483,6 +483,9 @@ private fun ChatPageContent(
                     vm.updateConversation(conversation.copy(customSystemPrompt = newPrompt))
                     vm.saveConversationAsync()
                 },
+                onTranslateReasoning = { message, locale ->
+                    vm.translateReasoning(message, locale)
+                },
             )
         }
 

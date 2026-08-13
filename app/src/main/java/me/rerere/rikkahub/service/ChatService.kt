@@ -1056,6 +1056,88 @@ class ChatService(
         updateConversation(conversationId, currentConversation.copy(messageNodes = updatedNodes))
     }
 
+    /**
+     * 翻译思维链 (修改点：先设置空翻译，支持流式更新)
+     */
+    fun translateReasoning(
+        conversationId: Uuid,
+        messageId: Uuid,
+        targetLanguage: Locale
+    ) {
+        appScope.launch(Dispatchers.IO) {
+            try {
+                val settings = settingsStore.settingsFlow.first()
+                val currentConversation = getConversationFlow(conversationId).value
+
+                val message = currentConversation.currentMessages.find { it.id == messageId }
+                    ?: return@launch
+
+                val reasoningText = message.parts
+                    .filterIsInstance<UIMessagePart.Reasoning>()
+                    .joinToString("\n\n") { it.reasoning }
+                    .trim()
+
+                if (reasoningText.isBlank()) return@launch
+
+                // 先设置一个空的 translation 来触发 UI 显示"翻译中"状态
+                updateReasoningTranslationField(conversationId, messageId, "")
+
+                generationHandler.translateText(
+                    settings = settings,
+                    sourceText = reasoningText,
+                    targetLanguage = targetLanguage
+                ) { translatedText ->
+                    // 流式更新翻译内容
+                    updateReasoningTranslationField(conversationId, messageId, translatedText)
+                }.collect { }
+
+                saveConversation(conversationId, getConversationFlow(conversationId).value)
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                // 出错时清空翻译字段
+                clearReasoningTranslationField(conversationId, messageId)
+                addError(e, conversationId, title = context.getString(R.string.error_title_translate_message))
+            }
+        }
+    }
+
+    /**
+     * 更新思维链翻译字段
+     */
+    private fun updateReasoningTranslationField(
+        conversationId: Uuid,
+        messageId: Uuid,
+        translationText: String?
+    ) {
+        val currentConversation = getConversationFlow(conversationId).value
+        val updatedNodes = currentConversation.messageNodes.map { node ->
+            if (node.messages.any { it.id == messageId }) {
+                val updatedMessages = node.messages.map { msg ->
+                    if (msg.id == messageId) {
+                        val updatedParts = msg.parts.map { part ->
+                            if (part is UIMessagePart.Reasoning) {
+                                part.copy(translation = translationText)
+                            } else part
+                        }
+                        msg.copy(parts = updatedParts)
+                    } else msg
+                }
+                node.copy(messages = updatedMessages)
+            } else node
+        }
+        updateConversation(conversationId, currentConversation.copy(messageNodes = updatedNodes))
+    }
+
+    /**
+     * 清空思维链翻译字段 (新增)
+     */
+    private fun clearReasoningTranslationField(
+        conversationId: Uuid,
+        messageId: Uuid
+    ) {
+        updateReasoningTranslationField(conversationId, messageId, null)
+    }
+
     // ---- 消息操作 ----
 
     suspend fun editMessage(
