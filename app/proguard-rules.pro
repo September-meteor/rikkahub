@@ -1,0 +1,2 @@
+-keepnames class me.rerere.ai.provider.** { *; }
+-keepnames class me.rerere.ai.core.** { *; }
