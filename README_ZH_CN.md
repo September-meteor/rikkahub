@@ -1,98 +1,118 @@
-<div align="center">
-  <img src="docs/icon.png" alt="App 图标" width="100" />
-  <h1>RikkaHub</h1>
+# Rikkahub
 
-一个原生Android LLM 聊天客户端，支持切换不同的供应商进行聊天 🤖💬
+[English](README.md) | [简体中文](README_ZH_CN.md) | [繁體中文](README_ZH_TW.md)
 
-[English](README.md) | [繁體中文](README_ZH_TW.md) | 简体中文
+> 这是 [rikkahub](https://github.com/rikkahub/rikkahub) 的个人 fork。
+> 原项目非常出色，我只是在此基础上修改了一点小 bug 或对我个人而言的痛点，增加了一点新功能。
+> 如果改动里有你心仪的点，你可以尝试此项目；如果你追求原生和稳定，你应该选择原项目。
 
-点击链接加入群聊 👉 [【RikkaHub】](https://qm.qq.com/q/I8MSU0FkOu)
+## 和上游的区别
 
-</div>
+### 问题修复
+- **Markdown / HTML 嵌套列表渲染错误**：
+  - 修复了子有序列表被错误地当成外层有序列表渲染的问题。
+  - 修复了列表项内文本与子列表穿插时，一些子列表被错误地堆放到结尾的问题。
+  - 优化了列表项内多段落/块级元素的垂直排版，避免内容横向挤压。
+- **Release 构建兼容性问题**：修复 release 包中因类名/属性名被混淆可能导致的部分页面选项显示为乱码的问题。
 
-<div align="center">
-  <img src="docs/img/chat.png" alt="Chat Interface" width="150" />
-  <img src="docs/img/desktop.png" alt="Models Picker" width="450" />
-</div>
+### 新增功能
+- **图片压缩**：发送图片前自动压缩尺寸过大的图片，可在「扩展管理 → 图片压缩」中开关、调整最大边长（默认 2048px）。
+- **思维链复制**：AI 消息头像旁新增一键复制模型思维链按钮。
+- **思维链翻译**：AI 消息头像旁新增翻译按钮与语言选择按钮：翻译支持原文/译文切换，译文流式生成；语言选择按钮样式为选择语言的国旗 emoji，默认选择系统语言。
 
+## 下载与安装
 
-## 🚀 下载
+[![Release](https://img.shields.io/github/v/release/September-meteor/rikkahub?label=最新版本)](https://github.com/September-meteor/rikkahub/releases/latest)
 
-🔗 [前往官网下载](https://rikka-ai.com/download)（推荐）
-🔗 [前往 Google Play 下载](https://play.google.com/store/apps/details?id=me.rerere.rikkahub)
+- 也可在 [Releases](https://github.com/September-meteor/rikkahub/releases) 页面查看历史版本 APK。
+- 系统要求：Android 8.0（API 26）及以上。
 
-> [!WARNING]
-> RikkaHub 存在许多 fork 版本，fork 版本出现问题与 RikkaHub 无关，请谨慎使用 fork 版本，避免隐私泄露或者过度索要权限问题。
+### 安装前必读
 
-## 💖 赞助商
+1. **签名冲突**：本 fork 使用我个人的签名打包，与官方 RikkaHub 签名不一致。**无法直接覆盖安装**。
+   - 你需要先卸载官方版，再安装此版本；
+   - 或者使用一些工作空间软件进行双开；
+   - 或者自己修改 `applicationId` 后重新编译（但可能有数据迁移和 google-services.json 配置问题）。
+2. **数据迁移**：本版本 release 包和原版包名一致，因此可以导入并应用原版软件导出的备份。请**在卸载原版软件前务必在设置-数据备份-本地将应用数据导出为文件**，并在安装此版本后在相同页面导入备份文件。
+3. **风险自担**：个人 DIY 版本，难免有未发现的 bug。请谨慎在生产环境或重要数据上使用。
 
-|                                         赞助商                                         | 介绍                                                                                                                                              |
-|:-----------------------------------------------------------------------------------:|:------------------------------------------------------------------------------------------------------------------------------------------------|
-| <img src="docs/sponsors/aihubmix.png" alt="Aihubmix" width="50" /><br /><b>Aihubmix</b> | 感谢 <a href="https://aihubmix.com?aff=pG7r">aihubmix.com</a> 的资金支持。我们推荐使用 aihubmix 作为全球主流模型的一站式服务平台。（OpenAI、Claude、Google Gemini、DeepSeek、Qwen 以及数百种其他模型）。 |
-| <img src="docs/sponsors/suixiang.jpg" alt="随想AI中转" width="50" /><br /><b><a href="https://sui-xiang.com">随想AI中转</a></b> | 感谢<a href="https://sui-xiang.com">随想AI中转</a>对本项目的赞助！随想AI中转 是一家可靠高效的 API 中继服务提供商，提供 Claude、Codex、Gemini 等的中继服务。注重隐私的中转站·无数据倒卖·无模型掺水，隐私，透明，极速售后。新账户注册每日签到就送 0.5 元测试额度，充值额度 1:1，无需订阅，按量付费。多线路冗余、跨区域容灾、自动故障切换，长链路 SSE 不中断。99.9% 可用性，关键调用从不掉队。 |
-| <img src="docs/sponsors/ztest.png" alt="真测 ztest.ai" width="50" /><br /><b><a href="https://ztest.ai">真测 ztest.ai</a></b> | 感谢<a href="https://ztest.ai">真测 ztest.ai</a>对本项目的赞助！真测 ztest.ai 是一个 AI 中转站模型检测平台，检测结果数据全公开，23 项探针覆盖协议、身份、能力、内容完整性、安全性、性能六大维度，交叉印证识别伪造与降级。作为独立第三方验证平台，实时监测 AI 中转站的模型真实性、响应质量与服务可用性。 |
+### 关于更新频率
 
-## ✨ 功能特色
+- 上游更新非常频繁，我**不保证**会实时同步上游的每一个版本。
+- 但会尽量在更新时一并同步上游的更新。
 
-- 🎨 现代化安卓APP设计（Material You / 预测性返回）和 🌙 暗色模式
-- 📦 工作区：基于 proot 的 Linux 智能体环境
-- 🖥️ Web多端访问支持
-- 🛠️ MCP 支持
-- 🔄 多种类型的供应商支持，自定义 API / URL / 模型（目前支持 OpenAI、Google、Anthropic）
-- 🖼️ 多模态输入支持
-- 📝 Markdown 渲染（支持代码高亮、数学公式、表格、Mermaid）
-- 🔍 搜索功能（Exa、Tavily、Zhipu、LinkUp、Brave、Perplexity、..）
-- 🧩 Prompt 变量（模型名称、时间等）
-- 🤳 二维码导出和导入提供商
-- 🤖 智能体自定义
-- 🧠 类ChatGPT记忆功能
-- 📝 AI翻译
-- 🌐 自定义HTTP请求头和请求体
+> 如果你有自己的想法，可以参考下方【编译】章节自行构建。
 
-## ✨ 贡献
+## 编译
 
-本项目使用[Android Studio](https://developer.android.com/studio)开发，欢迎提交PR
+喜欢图形界面的可尝试 Android Studio，本章节主要介绍纯命令行的编译方法。
 
-技术栈文档:
+编译环境：GNU/Linux（Debian 系）或类似终端环境（如 Windows 的 WSL）。
 
-- [Kotlin](https://kotlinlang.org/) (开发语言)
-- [Koin](https://insert-koin.io/) (依赖注入)
-- [Jetpack Compose](https://developer.android.com/jetpack/compose) (UI 框架)
-- [DataStore](https://developer.android.com/topic/libraries/architecture/datastore?hl=zh-cn#preferences-datastore) (
-  偏好数据存储)
-- [Room](https://developer.android.com/training/data-storage/room) (数据库)
-- [Coil](https://coil-kt.github.io/coil/) (图片加载)
-- [Material You](https://m3.material.io/) (UI 设计)
-- [Navigation 3](https://developer.android.com/guide/navigation/navigation-3) (导航)
-- [Okhttp](https://square.github.io/okhttp/) (HTTP 客户端)
-- [kotlinx.serialization](https://github.com/Kotlin/kotlinx.serialization) (Json序列化)
+### 编译要求
 
-> [!TIP]
-> 你需要在 `app` 文件夹下添加 `google-services.json` 文件才能构建应用。
+1. 基础运行环境
+  - **JDK**：`openjdk-17-jdk`
+  - **Node.js & pnpm**: Node 22 + pnpm 11
 
-> [!IMPORTANT]  
-> 以下PR将被拒绝：
-> 1. 添加新语言，因为添加新语言会增加后续本地化的工作量
-> 2. 添加新功能，这个项目是有态度的
-> 3. AI生成的大规模重构和更改
+2. APP 编译
+- **Android SDK**：
+  - `platform-tools`
+  - `build-tools;37.0.0`
+  - `platforms;android-37`
+- **gradlew 同步 & 配置文件**：确保 app/ 目录下存在配置好的 google-services.json
 
-## 💰 捐赠
+3. 前端 Web 全栈
+- **RTV Stack**：React Router v7 + Tailwind Oxide + Vite
+- **Google Material Color Utilities 库**
 
-* [Patreon](https://patreon.com/rikkahub)
-* [爱发电](https://afdian.com/a/reovo)
+> 由于篇幅原因，这里只说构建方法。
+> 关于编译要求的1、2点如何配置，可查看 [BUILDING.md](./BUILDING.md)
 
-## ⭐ Star History
+### 一、准备依赖和克隆
 
-如果喜欢这个项目，请给个Star ⭐
+1. 克隆同时拉取 Material Color Utilities 源码
+```bash
+git clone --recursive https://github.com/September-meteor/rikkahub.git
+```
 
-<a href="https://www.star-history.com/?type=date&repos=re-ovo%2Frikkahub">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=re-ovo/rikkahub&type=date&theme=dark&legend=top-left&sealed_token=qSytWeq7LkzQQViTjK0MYlvvA_qkfuwjOxOqgbRpLUZZwok5rO6LXhpVL7Mq-q3o89BfKpzE7g66BCy18H6eiqTsD8czD0J-HejLqmHy-npcvCTHu11wZw" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=re-ovo/rikkahub&type=date&legend=top-left&sealed_token=qSytWeq7LkzQQViTjK0MYlvvA_qkfuwjOxOqgbRpLUZZwok5rO6LXhpVL7Mq-q3o89BfKpzE7g66BCy18H6eiqTsD8czD0J-HejLqmHy-npcvCTHu11wZw" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=re-ovo/rikkahub&type=date&legend=top-left&sealed_token=qSytWeq7LkzQQViTjK0MYlvvA_qkfuwjOxOqgbRpLUZZwok5rO6LXhpVL7Mq-q3o89BfKpzE7g66BCy18H6eiqTsD8czD0J-HejLqmHy-npcvCTHu11wZw" />
- </picture>
-</a>
+2. 安装前端依赖
+```bash
+cd ~/rikkahub/web-ui
+pnpm install
+```
 
-## 📄 许可证
+### 二、开始构建
 
-本项目基于 [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0) 开源。
+由于配置签名密钥很麻烦，所以我们这里直接借用 Debug 密钥。这里**仅限个人使用**这么做，否则应该配置 Release 签名。
+```bash
+cd ~/rikkahub
+cd ~/rikkahub && printf "storeFile=$HOME/.android/debug.keystore\nstorePassword=android\nkeyAlias=androiddebugkey\nkeyPassword=android\n" >> local.properties
+./gradlew assembleRelease
+```
+
+构建好的安装包位于 `~/rikkahub/app/build/outputs/apk/release/`。
+app-arm64-v8a-release.apk 适配 ARM 64位处理器，适用2016年后的绝大多数手机。
+app-x86_64-release.apk 适配 64位x86 架构的处理器，主要用于 Android 模拟器或极少数的 Intel/AMD 设备。
+app-universal-release.apk 为通用包，包含以上架构的代码。
+
+## 许可证 (License)
+
+本项目是 [RikkaHub](https://github.com/rikkahub/rikkahub) 的衍生作品 (Derivative Work)。
+
+**原项目许可：**
+> 原项目 RikkaHub (由 [rerere](https://github.com/rerere) 及 RikkaHub 贡献者开发) 采用 [GNU Affero General Public License v3.0 (AGPL-3.0)](https://www.gnu.org/licenses/agpl-3.0.html) 许可。
+
+**本 Fork 修改部分：**
+> Copyright © 2026 September-meteor
+> 本 fork 中新增和修改的代码，同样遵循 **AGPL-3.0** 许可证。
+
+根据 AGPL-3.0 协议关于“修改版本 (Modified Versions)”的要求，本项目已在上方 **[与上游的区别]** 章节中详细标明了所有对原项目的修改内容。
+
+完整的 AGPL-3.0 许可证文本请查阅仓库根目录的 [`LICENSE`](LICENSE) 文件。
+
+## 致谢
+
+感谢 [@rerere](https://github.com/rerere) 和 RikkaHub 团队开发了如此优秀的客户端！
+
+上游更新极快且专注核心演进，本 fork 纯属个人为了修补一些影响体验的 bug 和满足个人的细碎需求（如思维链翻译、图片压缩）而打的补丁。项目 99.9% 的代码和架构设计均归功于原作者。
