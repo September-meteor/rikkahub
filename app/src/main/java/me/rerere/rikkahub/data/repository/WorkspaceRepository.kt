@@ -332,6 +332,10 @@ class WorkspaceRepository(
         )
     }
 
+    suspend fun updateWorkspace(workspace: WorkspaceEntity) {
+        dao.upsert(workspace)
+    }
+
     companion object {
         private const val TAG = "WorkspaceRepository"
         private const val MAX_PREVIEW_BYTES = 512L * 1024

@@ -1302,4 +1302,11 @@
   <string name="setting_update_reminder_pause_description">Choose how long to pause update reminders. They will resume automatically.</string>
   <string name="setting_update_reminder_pause_days">%1$d days</string>
   <string name="setting_update_reminder_resume_now">Resume now</string>
+  <string name="workspace_detail_import_directory">Import directory</string>
+  <string name="workspace_detail_import_settings">Import Settings</string>
+  <string name="workspace_detail_import_settings_desc">Control filtering behavior during directory import</string>
+  <string name="workspace_detail_enable_gitignore">Recursively parse .gitignore</string>
+  <string name="workspace_detail_enable_gitignore_desc">Automatically skip files and directories ignored in .gitignore during import</string>
+  <string name="workspace_detail_custom_ignore">Custom exclusion pattern</string>
+  <string name="workspace_detail_custom_ignore_hint">Separate items with commas or line breaks, e.g., node_modules, .git, build</string>
 </resources>

@@ -1300,4 +1300,11 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_update_reminder_pause_days">%1$d 天</string>
   <string name="setting_update_reminder_resume_now">立即恢复</string>
   <string name="reasoning_max">最大</string>
+  <string name="workspace_detail_import_directory">导入目录</string>
+  <string name="workspace_detail_import_settings">导入设置</string>
+  <string name="workspace_detail_import_settings_desc">控制目录导入时的过滤行为</string>
+  <string name="workspace_detail_enable_gitignore">递归解析 .gitignore</string>
+  <string name="workspace_detail_enable_gitignore_desc">导入时自动跳过 .gitignore 中忽略的文件和目录</string>
+  <string name="workspace_detail_custom_ignore">自定义排除模式</string>
+  <string name="workspace_detail_custom_ignore_hint">用逗号或换行分隔，如: node_modules, .git, build</string>
 </resources>

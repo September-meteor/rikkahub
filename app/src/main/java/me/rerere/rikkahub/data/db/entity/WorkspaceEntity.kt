@@ -33,6 +33,10 @@ data class WorkspaceEntity(
     // 工具审批的用户覆盖项 (toolName -> needsApproval)，未覆盖的工具沿用默认值
     @ColumnInfo("tool_approvals", defaultValue = "{}")
     val toolApprovals: String = "{}",
+    @ColumnInfo("enable_gitignore", defaultValue = "1")
+    val enableGitignore: Boolean = true,
+    @ColumnInfo("custom_ignore_patterns", defaultValue = "")
+    val customIgnorePatterns: String = "",
 ) {
     fun toolApprovalOverrides(): Map<String, Boolean> = runCatching {
         JsonInstant.decodeFromString<Map<String, Boolean>>(toolApprovals)

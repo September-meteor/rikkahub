@@ -86,6 +86,7 @@ import me.rerere.workspace.WorkspaceShellStatus
 import me.rerere.workspace.WorkspaceStorageArea
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
+import androidx.compose.material3.CircularProgressIndicator
 
 @Composable
 fun WorkspaceDetailPage(id: String) {
@@ -100,6 +101,21 @@ fun WorkspaceDetailPage(id: String) {
     var showInstallDialog by remember { mutableStateOf(false) }
     var previewImageUri by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
+
+    // 新增：目录选择器（用于导入整个目录）
+    val directoryPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree(),
+    ) { treeUri ->
+        if (treeUri == null) return@rememberLauncherForActivityResult
+        val ws = state.workspace ?: return@rememberLauncherForActivityResult
+        vm.importDirectory(
+            context = context,
+            treeUri = treeUri,
+            enableGitignore = ws.enableGitignore,
+            customIgnorePatterns = ws.customIgnorePatterns,
+        )
+    }
+
     val filePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
     ) { uri ->
@@ -140,7 +156,44 @@ fun WorkspaceDetailPage(id: String) {
                 navigationIcon = { BackButton() },
                 actions = {
                     if (pagerState.currentPage == 1) {
-                        IconButton(onClick = { filePicker.launch(arrayOf("*/*")) }) {
+                        // 目录导入按钮（带进度圈）
+                        val importProgress = state.importProgress
+                        Box(contentAlignment = Alignment.Center) {
+                            if (importProgress != null) {
+                                val (processed, total) = importProgress
+                                if (total < 0) {
+                                    // 扫描阶段：不确定进度
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(40.dp),
+                                        strokeWidth = 3.dp,
+                                        color = MaterialTheme.colorScheme.primary,
+                                    )
+                                } else {
+                                    val progress = if (total > 0) processed.toFloat() / total else 0f
+                                    CircularProgressIndicator(
+                                        progress = { progress },
+                                        modifier = Modifier.size(40.dp),
+                                        strokeWidth = 3.dp,
+                                        color = MaterialTheme.colorScheme.primary,
+                                    )
+                                }
+                            }
+                            IconButton(
+                                onClick = { directoryPicker.launch(null) },
+                                enabled = importProgress == null,
+                            ) {
+                                Icon(
+                                    imageVector = HugeIcons.Folder01,
+                                    contentDescription = stringResource(R.string.workspace_detail_import_directory),
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        }
+                
+                        IconButton(
+                            onClick = { filePicker.launch(arrayOf("*/*")) },
+                            enabled = state.importProgress == null, // 导入中禁用
+                        ) {
                             Icon(
                                 HugeIcons.FileImport,
                                 contentDescription = stringResource(R.string.workspace_detail_import_file),
@@ -189,6 +242,8 @@ fun WorkspaceDetailPage(id: String) {
                     installProgress = installProgress,
                     onInstallRootfs = { showInstallDialog = true },
                     onToolApprovalChange = vm::setToolApproval,
+                    onEnableGitignoreChange = vm::setEnableGitignore,
+                    onCustomIgnoreChange = vm::setCustomIgnorePatterns,
                 )
 
                 1 -> WorkspaceFilesPage(
@@ -312,6 +367,8 @@ private fun WorkspaceBasicPage(
     installProgress: RootfsInstallProgress?,
     onInstallRootfs: () -> Unit,
     onToolApprovalChange: (String, Boolean) -> Unit,
+    onEnableGitignoreChange: (Boolean) -> Unit,
+    onCustomIgnoreChange: (String) -> Unit,
 ) {
     val shellStatus = workspace?.shellStatus
     val installing = installProgress != null || shellStatus == WorkspaceShellStatus.INSTALLING.name
@@ -386,6 +443,14 @@ private fun WorkspaceBasicPage(
                     }
                 }
             }
+        }
+
+        item {
+            WorkspaceImportSettingsCard(
+                workspace = workspace,
+                onEnableGitignoreChange = onEnableGitignoreChange,
+                onCustomIgnoreChange = onCustomIgnoreChange,
+            )
         }
 
         item {
@@ -835,6 +900,75 @@ internal fun String.toShellStatusLabel(): String = when (this) {
     WorkspaceShellStatus.READY.name -> stringResource(R.string.workspace_detail_shell_ready)
     WorkspaceShellStatus.BROKEN.name -> stringResource(R.string.workspace_detail_shell_broken)
     else -> lowercase()
+}
+
+@Composable
+private fun WorkspaceImportSettingsCard(
+    workspace: WorkspaceEntity?,
+    onEnableGitignoreChange: (Boolean) -> Unit,
+    onCustomIgnoreChange: (String) -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CustomColors.cardColorsOnSurfaceContainer,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = stringResource(R.string.workspace_detail_import_settings),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    text = stringResource(R.string.workspace_detail_import_settings_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            // .gitignore 开关
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.workspace_detail_enable_gitignore),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Text(
+                        text = stringResource(R.string.workspace_detail_enable_gitignore_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = workspace?.enableGitignore != false,
+                    onCheckedChange = onEnableGitignoreChange,
+                    enabled = workspace != null,
+                )
+            }
+
+            // 自定义排除目录输入框
+            OutlinedTextField(
+                value = workspace?.customIgnorePatterns ?: "",
+                onValueChange = onCustomIgnoreChange,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(stringResource(R.string.workspace_detail_custom_ignore)) },
+                placeholder = { Text(stringResource(R.string.workspace_detail_custom_ignore_hint)) },
+                enabled = workspace != null,
+                minLines = 2,
+            )
+        }
+    }
 }
 
 private const val DEFAULT_ROOTFS_URL =
