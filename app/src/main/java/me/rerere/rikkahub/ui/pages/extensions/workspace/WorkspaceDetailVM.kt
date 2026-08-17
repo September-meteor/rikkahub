@@ -1,11 +1,11 @@
 package me.rerere.rikkahub.ui.pages.extensions.workspace
 
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.getAndUpdate
@@ -16,12 +16,23 @@ import java.io.InputStream
 import java.io.OutputStream
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
+import me.rerere.rikkahub.data.sync.DocumentCache
+import me.rerere.rikkahub.data.sync.InternalScanResult
+import me.rerere.rikkahub.data.sync.SyncCheckMode
+import me.rerere.rikkahub.data.sync.SyncPreviewItem
+import me.rerere.rikkahub.data.sync.SyncSnapshot
+import me.rerere.rikkahub.data.sync.SyncStage
+import me.rerere.rikkahub.data.sync.SyncStageException
+import me.rerere.rikkahub.data.sync.WorkspaceIgnoreRules
+import me.rerere.rikkahub.data.sync.WorkspaceSyncEngine
 import me.rerere.workspace.RootfsInstallProgress
 import me.rerere.workspace.RootfsInstallStage
 import me.rerere.workspace.WorkspaceFileEntry
 import me.rerere.workspace.WorkspaceCommandResult
 import me.rerere.workspace.WorkspaceStorageArea
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 
 class WorkspaceDetailVM(
     private val id: String,
@@ -38,6 +49,13 @@ class WorkspaceDetailVM(
 
     private val _installError = MutableStateFlow<String?>(null)
     val installError = _installError.asStateFlow()
+
+    /** 「导回原处」进行中的协程（扫描阶段可取消） */
+    private var syncJob: Job? = null
+
+    /** 预览阶段构建并保留的排除规则 / DocumentFile 缓存，供确认执行时复用 */
+    private var syncRules: WorkspaceIgnoreRules? = null
+    private var syncDocCache: DocumentCache? = null
 
     init {
         loadWorkspace()
@@ -135,8 +153,8 @@ class WorkspaceDetailVM(
 
     // 导入整个目录（方案3：流式总数 + 增强.gitignore解析）
     fun importDirectory(
-        context: android.content.Context,
-        treeUri: android.net.Uri,
+        context: Context,
+        treeUri: Uri,
         enableGitignore: Boolean,
         customIgnorePatterns: String,
     ) {
@@ -144,120 +162,37 @@ class WorkspaceDetailVM(
             // -1 表示正在快速扫描阶段，UI 会显示不确定进度
             _state.update { it.copy(loading = true, error = null, importProgress = 0 to -1) }
 
+            // 2.1 拿到 treeUri 后立即占住持久化权限（READ + WRITE），为「导回原处」做准备
+            val persisted = runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    treeUri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                )
+                true
+            }.getOrDefault(false)
+
+            // 2.2 记录原始目录 URI（权限失效时 UI 据此引导重新选择）
+            repository.getById(id)?.let { ws ->
+                repository.updateWorkspace(
+                    ws.copy(
+                        sourceTreeUri = treeUri.toString(),
+                        sourceUriPersisted = persisted,
+                        updatedAt = System.currentTimeMillis(),
+                    )
+                )
+            }
+
+            // 排除规则：与「导回原处」共用同一实现，保证导出时不误删被排除内容
+            val rules = WorkspaceIgnoreRules(enableGitignore, customIgnorePatterns)
+
             runCatching {
-                val rootDoc = androidx.documentfile.provider.DocumentFile.fromTreeUri(context, treeUri)
+                val rootDoc = DocumentFile.fromTreeUri(context, treeUri)
                     ?: error("无法访问所选目录")
                 val rootName = rootDoc.name ?: "imported"
 
-                // 用户自定义排除模式
-                val userPatterns = customIgnorePatterns
-                    .split(',', '，', '\n')
-                    .map { it.trim() }
-                    .filter { it.isNotEmpty() }
-                    .toSet()
-
-                // 增强的 .gitignore 规则结构
-                data class IgnoreRule(
-                    val regex: Regex,
-                    val isNegation: Boolean,
-                    val isAnchored: Boolean,      // 以 / 开头，只匹配直接子项
-                    val isDirectoryOnly: Boolean, // 以 / 结尾，只匹配目录
-                    val rawPattern: String,
-                )
-
-                fun shouldIgnore(
-                    name: String,
-                    parentDir: String,
-                    isDirectory: Boolean,
-                    gitignoreRules: Map<String, List<IgnoreRule>>,
-                ): Boolean {
-                    // 1. 用户自定义模式（支持 * ? 和 / 后缀）
-                    if (userPatterns.any { pattern ->
-                        when {
-                            pattern.endsWith("/") -> isDirectory && name == pattern.dropLast(1)
-                            pattern.contains("*") || pattern.contains("?") -> name.matches(
-                                pattern.replace(".", "\\.")
-                                    .replace("*", ".*")
-                                    .replace("?", ".")
-                                    .toRegex()
-                            )
-                            else -> name == pattern
-                        }
-                    }) return true
-
-                    // 2. .gitignore 规则
-                    if (!enableGitignore) return false
-                    val rules = gitignoreRules[parentDir] ?: return false
-
-                    var ignored = false
-                    for (rule in rules) {
-                        val matches = when {
-                            // /build 只匹配当前目录下的直接子项 build
-                            rule.isAnchored -> name == rule.rawPattern || name.matches(rule.regex)
-                            // build 匹配任何层级的 build
-                            else -> name.matches(rule.regex)
-                        }
-                        if (!matches) continue
-                        // build/ 只忽略目录，不忽略同名文件
-                        if (rule.isDirectoryOnly && !isDirectory) continue
-                        ignored = if (rule.isNegation) false else true
-                    }
-                    return ignored
-                }
-
-                fun loadGitignore(
-                    dir: androidx.documentfile.provider.DocumentFile,
-                    key: String,
-                    gitignoreRules: MutableMap<String, MutableList<IgnoreRule>>,
-                ) {
-                    if (!enableGitignore) return
-                    val gitignoreDoc = dir.findFile(".gitignore")
-                    if (gitignoreDoc == null || !gitignoreDoc.isFile) return
-                    val rules = mutableListOf<IgnoreRule>()
-                    context.contentResolver.openInputStream(gitignoreDoc.uri)
-                        ?.bufferedReader()?.useLines { lines ->
-                            lines.forEach { line ->
-                                val trimmed = line.trim()
-                                if (trimmed.isEmpty() || trimmed.startsWith("#")) return@forEach
-                                val isNegation = trimmed.startsWith("!")
-                                val rawPattern = if (isNegation) trimmed.substring(1) else trimmed
-
-                                val isDirectoryOnly = rawPattern.endsWith("/")
-                                val cleanPattern = if (isDirectoryOnly) rawPattern.dropLast(1) else rawPattern
-
-                                val isAnchored = cleanPattern.startsWith("/")
-                                val patternText = if (isAnchored) cleanPattern.substring(1) else cleanPattern
-
-                                // 简单 glob → regex：支持 * 和 ?
-                                val regexText = patternText
-                                    .replace(".", "\\.")
-                                    .replace("*", ".*")
-                                    .replace("?", ".")
-
-                                val regex = try {
-                                    regexText.toRegex()
-                                } catch (e: Exception) {
-                                    return@forEach
-                                }
-                                rules.add(
-                                    IgnoreRule(
-                                        regex = regex,
-                                        isNegation = isNegation,
-                                        isAnchored = isAnchored,
-                                        isDirectoryOnly = isDirectoryOnly,
-                                        rawPattern = patternText
-                                    )
-                                )
-                            }
-                        }
-                    if (rules.isNotEmpty()) {
-                        gitignoreRules[key] = (gitignoreRules[key] ?: mutableListOf()).apply { addAll(rules) }
-                    }
-                }
-
                 // 阶段1：快速浅扫描，只统计文件数（不加载 .gitignore，非常快）
-                val subtreeCounts = mutableMapOf<android.net.Uri, Int>()
-                fun quickScan(doc: androidx.documentfile.provider.DocumentFile): Int {
+                val subtreeCounts = mutableMapOf<Uri, Int>()
+                fun quickScan(doc: DocumentFile): Int {
                     val count = if (!doc.isDirectory) {
                         1
                     } else {
@@ -270,18 +205,19 @@ class WorkspaceDetailVM(
                 var currentTotal = approxTotal
                 var processed = 0
 
-                // 阶段2：边加载 .gitignore 边导入，动态修正总数
-                val gitignoreRules = mutableMapOf<String, MutableList<IgnoreRule>>()
-                loadGitignore(rootDoc, rootName, gitignoreRules)
+                // 阶段2：边加载 .gitignore 边导入，动态修正总数。
+                // 排除规则的 key 统一采用「相对导入根目录」的路径（根为 ""，子目录为 "src"），
+                // 与「导回原处」的内部/外部扫描完全一致。
+                rules.loadGitignore(rootDoc, "", context.contentResolver)
 
                 suspend fun importDoc(
-                    doc: androidx.documentfile.provider.DocumentFile,
-                    parentDir: String,
+                    doc: DocumentFile,
+                    parentKey: String,
                 ) {
                     val name = doc.name ?: return
                     val isDir = doc.isDirectory
 
-                    if (shouldIgnore(name, parentDir, isDir, gitignoreRules)) {
+                    if (rules.shouldIgnore(name, parentKey, isDir)) {
                         // 被忽略时从总数中扣除该子树文件数，避免进度永远到不了 100%
                         val skippedCount = subtreeCounts[doc.uri] ?: if (isDir) quickScan(doc) else 1
                         currentTotal -= skippedCount
@@ -291,18 +227,19 @@ class WorkspaceDetailVM(
                     }
 
                     if (isDir) {
-                        val nextDir = if (parentDir.isEmpty()) name else "$parentDir/$name"
-                        loadGitignore(doc, nextDir, gitignoreRules)
+                        val nextKey = if (parentKey.isEmpty()) name else "$parentKey/$name"
+                        rules.loadGitignore(doc, nextKey, context.contentResolver)
                         doc.listFiles()?.forEach { child ->
-                            importDoc(child, nextDir)
+                            importDoc(child, nextKey)
                         }
                     } else {
                         context.contentResolver.openInputStream(doc.uri)?.use { stream ->
                             val fileName = doc.name ?: "unnamed"
+                            // 内部布局保留根目录名（files/<rootName>/<rel>），与「导回原处」的 syncRoot 约定一致
+                            val relativeDest = if (parentKey.isEmpty()) rootName else "$rootName/$parentKey"
                             val destPath = when {
-                                state.value.path.isEmpty() -> parentDir
-                                parentDir.isEmpty() -> state.value.path
-                                else -> "${state.value.path}/$parentDir"
+                                state.value.path.isEmpty() -> relativeDest
+                                else -> "${state.value.path}/$relativeDest"
                             }
                             repository.importFile(
                                 id = id,
@@ -319,14 +256,32 @@ class WorkspaceDetailVM(
                 }
 
                 rootDoc.listFiles()?.forEach { child ->
-                    importDoc(child, rootName)
+                    importDoc(child, "")
                 }
                 // 强制对齐到 100%
                 if (currentTotal > 0) {
                     _state.update { it.copy(importProgress = currentTotal to currentTotal) }
                 }
+
+                // 2.3 导入完成后生成初始快照（相对导入根目录的路径 → 大小/hash + 目录指纹）。
+                // 直接复用本次导入的 rules（其 .gitignore key 约定与 scanInternal 完全一致），
+                // 保证被排除内容不会进入快照。
+                val filesDir = repository.workspaceFilesDir(id)
+                if (filesDir != null) {
+                    val internal = WorkspaceSyncEngine.scanInternal(filesDir, rootName, rules)
+                    repository.writeSyncSnapshot(
+                        id,
+                        SyncSnapshot(
+                            syncRoot = rootName,
+                            createdAt = System.currentTimeMillis(),
+                            files = internal.files,
+                            directories = internal.directories,
+                        ),
+                    )
+                }
             }.onSuccess {
                 _state.update { it.copy(loading = false, importProgress = null) }
+                loadWorkspace()
                 refresh()
             }.onFailure { error ->
                 _state.update {
@@ -357,6 +312,309 @@ class WorkspaceDetailVM(
                 workspace.copy(customIgnorePatterns = patterns, updatedAt = System.currentTimeMillis())
             )
             loadWorkspace()
+        }
+    }
+
+    /** 持久化同步检查模式（"fast" 快速 / "accurate" 完整），下次同步时读取生效 */
+    fun setSyncCheckMode(mode: SyncCheckMode) {
+        viewModelScope.launch {
+            val workspace = state.value.workspace ?: return@launch
+            repository.updateWorkspace(
+                workspace.copy(syncCheckMode = mode.value, updatedAt = System.currentTimeMillis())
+            )
+            loadWorkspace()
+        }
+    }
+
+    // ---- 「导回原处」：扫描 → 预览 → 确认 → 执行 ----
+
+    /**
+     * 开始同步链路：扫描内部 + 外部 → 对比生成预览。
+     *
+     * 整个链路包进 runCatching（异常隔离）：扫描 / 对比 / hash 各阶段异常分别包装为
+     * [SyncStageException] 并翻译成用户可读文案；单文件级异常已在引擎内跳过并记录日志，
+     * 不会让整个协程崩溃。
+     *
+     * 若原始目录权限失效或未导入目录，置 [WorkspaceDetailState.syncSourceLost]，
+     * 由 UI 层引导重新选择目录。
+     */
+    fun prepareSyncPreview(context: Context) {
+        syncJob?.cancel()
+        syncJob = viewModelScope.launch(Dispatchers.IO) {
+            val workspace = repository.getById(id) ?: return@launch
+            val treeUri = workspace.sourceTreeUri.takeIf { it.isNotBlank() }?.let { Uri.parse(it) }
+            val rootDoc = treeUri?.let { DocumentFile.fromTreeUri(context, it) }
+            if (rootDoc == null || !rootDoc.canWrite()) {
+                _state.update {
+                    it.copy(
+                        syncPhase = SyncPhase.IDLE,
+                        syncPreview = null,
+                        syncProgress = null,
+                        syncError = null,
+                        syncSourceLost = true,
+                    )
+                }
+                return@launch
+            }
+
+            // 进入扫描阶段（UI 显示「正在扫描变更…」弹窗，可取消）
+            _state.update {
+                it.copy(
+                    syncPhase = SyncPhase.SCANNING,
+                    syncPreview = null,
+                    syncProgress = null,
+                    syncError = null,
+                    syncSourceLost = false,
+                )
+            }
+
+            // 排除规则复用：与导入完全一致（.gitignore 从外部目录加载 + 自定义模式）
+            val mode = SyncCheckMode.from(workspace.syncCheckMode)
+            val rules = WorkspaceIgnoreRules(workspace.enableGitignore, workspace.customIgnorePatterns)
+            val docCache = DocumentCache()
+            syncRules = rules
+            syncDocCache = docCache
+
+            runCatching {
+                val snapshot = repository.readSyncSnapshot(id)
+                val syncRoot = snapshot?.syncRoot ?: (rootDoc.name ?: "imported")
+
+                // C：外部当前状态（目录指纹短路 + 快照复用，文件 hash 懒加载；DocumentFile 进缓存）
+                val external = stageCatching(SyncStage.SCAN_EXTERNAL) {
+                    WorkspaceSyncEngine.scanExternalFast(
+                        context = context,
+                        rootDoc = rootDoc,
+                        rules = rules,
+                        snapshot = snapshot,
+                        docCache = docCache,
+                        onProgress = { done, total ->
+                            emitSyncProgress(SyncProgressStage.SCAN, done, total)
+                        },
+                    )
+                }
+                // A：内部当前状态（排除 .rikkahub 等元数据目录与被排除内容；快速模式不 eager 算 hash）
+                val filesDir = repository.workspaceFilesDir(id)
+                val internal = if (filesDir != null) {
+                    stageCatching(SyncStage.SCAN_INTERNAL) {
+                        WorkspaceSyncEngine.scanInternal(
+                            filesDir = filesDir,
+                            syncRoot = syncRoot,
+                            rules = rules,
+                            withHash = mode == SyncCheckMode.ACCURATE,
+                            onProgress = { done, total ->
+                                emitSyncProgress(SyncProgressStage.SCAN, done, total)
+                            },
+                        )
+                    }
+                } else {
+                    InternalScanResult(emptyMap(), emptyMap())
+                }
+                // A vs C 直接对比生成预览（快照不参与操作类型判断；空目录参与 CREATE_DIR/DELETE_DIR）
+                val preview = stageCatching(SyncStage.COMPARE) {
+                    WorkspaceSyncEngine.computePreview(
+                        context = context,
+                        rootDoc = rootDoc,
+                        internal = internal.files,
+                        external = external.files,
+                        internalDirs = internal.emptyDirs,
+                        externalDirs = external.emptyDirs,
+                        mode = mode,
+                        docCache = docCache,
+                        onHashProgress = { done, total ->
+                            emitSyncProgress(SyncProgressStage.HASH, done, total)
+                        },
+                    )
+                }
+                SyncPreviewResult(syncRoot, preview)
+            }.onSuccess { result ->
+                _state.update {
+                    it.copy(
+                        syncRoot = result.syncRoot,
+                        syncPreview = result.preview,
+                        syncPhase = SyncPhase.PREVIEW,
+                        syncProgress = null,
+                        syncError = null,
+                        syncSourceLost = false,
+                    )
+                }
+            }.onFailure { error ->
+                if (error is CancellationException) throw error
+                _state.update {
+                    it.copy(
+                        syncPhase = SyncPhase.ERROR,
+                        syncPreview = null,
+                        syncProgress = null,
+                        syncError = error.toSyncErrorMessage(),
+                    )
+                }
+            }
+        }
+    }
+
+    /** 用户确认后真正执行同步写入，完成后更新快照 */
+    fun confirmSync(context: Context) {
+        val preview = state.value.syncPreview ?: return
+        if (preview.isEmpty()) {
+            _state.update { it.copy(syncPhase = SyncPhase.IDLE, syncPreview = null) }
+            return
+        }
+        syncJob?.cancel()
+        syncJob = viewModelScope.launch(Dispatchers.IO) {
+            val workspace = repository.getById(id) ?: return@launch
+            val rootDoc = workspace.sourceTreeUri
+                .takeIf { it.isNotBlank() }
+                ?.let { DocumentFile.fromTreeUri(context, Uri.parse(it)) }
+            if (rootDoc == null || !rootDoc.canWrite()) {
+                _state.update {
+                    it.copy(
+                        syncSourceLost = true,
+                        syncPhase = SyncPhase.IDLE,
+                        syncPreview = null,
+                        syncProgress = null,
+                    )
+                }
+                return@launch
+            }
+
+            _state.update {
+                it.copy(
+                    syncPhase = SyncPhase.EXECUTING,
+                    syncProgress = SyncProgress(SyncProgressStage.EXECUTE, 0, preview.size),
+                    syncPreview = null,
+                    syncError = null,
+                )
+            }
+            runCatching {
+                // 复用预览阶段的排除规则与 DocumentFile 缓存（SAF 定位降为 O(1)）；
+                // 规则丢失（进程重建等）时兜底重建并加载 .gitignore
+                val rules = syncRules
+                    ?: WorkspaceIgnoreRules(workspace.enableGitignore, workspace.customIgnorePatterns).also {
+                        WorkspaceSyncEngine.loadGitignoreTree(context, rootDoc, it, syncDocCache)
+                    }
+                val snapshot = repository.readSyncSnapshot(id)
+                val syncRoot = snapshot?.syncRoot ?: (rootDoc.name ?: "imported")
+                val filesDir = repository.workspaceFilesDir(id) ?: error("工作区文件目录不可用")
+
+                val internal = stageCatching(SyncStage.SCAN_INTERNAL) {
+                    WorkspaceSyncEngine.scanInternal(filesDir, syncRoot, rules)
+                }
+
+                // 执行写入（先删后写，复用缓存定位文件/目录，带进度回调）
+                stageCatching(SyncStage.EXECUTE) {
+                    WorkspaceSyncEngine.execute(
+                        context = context,
+                        rootDoc = rootDoc,
+                        preview = preview,
+                        syncRoot = syncRoot,
+                        repository = repository,
+                        id = id,
+                        docCache = syncDocCache,
+                        onProgress = { done, total ->
+                            emitSyncProgress(SyncProgressStage.EXECUTE, done, total)
+                        },
+                    )
+                }
+
+                // 写入完成后，把当前内部状态 A 重新写入快照（含目录指纹，供下次指纹短路）
+                repository.writeSyncSnapshot(
+                    id,
+                    SyncSnapshot(
+                        syncRoot = syncRoot,
+                        createdAt = System.currentTimeMillis(),
+                        files = internal.files,
+                        directories = internal.directories,
+                    ),
+                )
+            }.onSuccess {
+                _state.update {
+                    it.copy(syncPhase = SyncPhase.IDLE, syncProgress = null, syncPreview = null, syncError = null)
+                }
+                refresh()
+            }.onFailure { error ->
+                if (error is CancellationException) throw error
+                _state.update {
+                    it.copy(
+                        syncPhase = SyncPhase.ERROR,
+                        syncProgress = null,
+                        syncError = error.toSyncErrorMessage(),
+                    )
+                }
+            }
+        }
+    }
+
+    /** 取消当前同步流程（扫描阶段弹窗的「取消」；预览阶段等同关闭弹窗），回到 IDLE */
+    fun cancelSync() {
+        syncJob?.cancel()
+        syncJob = null
+        _state.update {
+            it.copy(
+                syncPhase = SyncPhase.IDLE,
+                syncPreview = null,
+                syncProgress = null,
+                syncError = null,
+            )
+        }
+    }
+
+    fun dismissSyncSourceLost() {
+        _state.update { it.copy(syncSourceLost = false) }
+    }
+
+    fun clearSyncError() {
+        _state.update { it.copy(syncError = null, syncPhase = SyncPhase.IDLE) }
+    }
+
+    // ---- 同步链路内部辅助 ----
+
+    /** 进度回调统一入口：写入 [WorkspaceDetailState.syncProgress] */
+    private fun emitSyncProgress(stage: SyncProgressStage, done: Int, total: Int) {
+        _state.update { it.copy(syncProgress = SyncProgress(stage, done, total)) }
+    }
+
+    /** 阶段隔离：非取消异常包装为 [SyncStageException]，供上层翻译成用户可读文案 */
+    private suspend fun <T> stageCatching(stage: SyncStage, block: suspend () -> T): T =
+        try {
+            block()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            throw SyncStageException(stage, e)
+        }
+
+    /** 把同步链路异常翻译成用户可读文案 */
+    private fun Throwable.toSyncErrorMessage(): String = when (this) {
+        is SyncStageException -> when (stage) {
+            SyncStage.SCAN_INTERNAL -> "扫描内部文件失败：${message ?: "未知错误"}"
+            SyncStage.SCAN_EXTERNAL -> "扫描外部目录失败：${message ?: "未知错误"}"
+            SyncStage.COMPARE -> "对比文件时出错：${message ?: "未知错误"}"
+            SyncStage.EXECUTE -> "同步失败：${message ?: "未知错误"}"
+        }
+
+        else -> message ?: "同步失败"
+    }
+
+    /** 权限失效后用户重新选择的目录：占住权限、持久化 URI，并自动生成新预览 */
+    fun onSyncSourcePicked(context: Context, treeUri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val persisted = runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    treeUri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                )
+                true
+            }.getOrDefault(false)
+            val workspace = repository.getById(id) ?: return@launch
+            repository.updateWorkspace(
+                workspace.copy(
+                    sourceTreeUri = treeUri.toString(),
+                    sourceUriPersisted = persisted,
+                    updatedAt = System.currentTimeMillis(),
+                )
+            )
+            _state.update { it.copy(syncSourceLost = false) }
+            loadWorkspace()
+            prepareSyncPreview(context)
         }
     }
 
@@ -481,6 +739,11 @@ class WorkspaceDetailVM(
         viewModelScope.launch {
             val workspace = repository.getById(id)
             _state.update { it.copy(workspace = workspace) }
+            // 加载同步根目录名（用于文件卡片上「同步回原目录」入口的显隐判断）
+            if (workspace != null && workspace.sourceTreeUri.isNotBlank()) {
+                val snapshot = repository.readSyncSnapshot(id)
+                _state.update { it.copy(syncRoot = snapshot?.syncRoot) }
+            }
         }
     }
 }
@@ -493,6 +756,47 @@ data class WorkspaceDetailState(
     val loading: Boolean = false,
     val error: String? = null,
     val importProgress: Pair<Int, Int>? = null,
+    // 「导回原处」同步状态（显式状态机）
+    val syncPhase: SyncPhase = SyncPhase.IDLE,
+    val syncPreview: List<SyncPreviewItem>? = null,
+    val syncRoot: String? = null,
+    val syncProgress: SyncProgress? = null,
+    val syncError: String? = null,
+    val syncSourceLost: Boolean = false,
+)
+
+/** 「导回原处」显式状态机 */
+enum class SyncPhase {
+    /** 无事发生 */
+    IDLE,
+
+    /** 正在扫描内部 + 外部目录（或完整模式校验内容） */
+    SCANNING,
+
+    /** 扫描完成，展示结果列表，等待用户确认 */
+    PREVIEW,
+
+    /** 用户确认后正在写入外部目录 */
+    EXECUTING,
+
+    /** 任何阶段出错，[WorkspaceDetailState.syncError] 携带可读错误信息 */
+    ERROR,
+}
+
+/** 同步进度（阶段 + 完成数 + 总数；total 为负表示总数未知，UI 显示不确定进度） */
+data class SyncProgress(
+    val stage: SyncProgressStage,
+    val done: Int,
+    val total: Int,
+)
+
+/** 进度阶段：扫描 / 内容校验 / 执行写入 */
+enum class SyncProgressStage { SCAN, HASH, EXECUTE }
+
+/** 预览阶段内部结果（syncRoot + 预览列表） */
+data class SyncPreviewResult(
+    val syncRoot: String,
+    val preview: List<SyncPreviewItem>,
 )
 
 data class WorkspaceTerminalState(

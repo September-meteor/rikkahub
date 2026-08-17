@@ -1311,4 +1311,26 @@
   <string name="workspace_detail_enable_gitignore_desc">Automatically skip files and directories ignored in .gitignore during import</string>
   <string name="workspace_detail_custom_ignore">Custom exclusion pattern</string>
   <string name="workspace_detail_custom_ignore_hint">Separate items with commas or line breaks, e.g., node_modules, .git, build</string>
+  <string name="workspace_detail_sync_to_source">Sync back to original directory</string>
+  <string name="workspace_detail_sync_preview_title">Sync Preview</string>
+  <string name="workspace_detail_sync_stats">New %1$d · Modified %2$d · Deleted %3$d</string>
+  <string name="workspace_detail_sync_section_new">New</string>
+  <string name="workspace_detail_sync_section_modified">Modified</string>
+  <string name="workspace_detail_sync_section_deleted">Deleted</string>
+  <string name="workspace_detail_sync_confirm">Confirm Sync</string>
+  <string name="workspace_detail_sync_progress">Syncing %1$d/%2$d</string>
+  <string name="workspace_detail_sync_no_changes">No changes to sync</string>
+  <string name="workspace_detail_sync_source_lost_title">Original Directory Permission Expired</string>
+  <string name="workspace_detail_sync_source_lost">The access permission for the original directory has expired. Please select it again before syncing back.</string>
+  <string name="workspace_detail_sync_reselect">Re-select Directory</string>
+  <string name="workspace_detail_sync_failed_title">Sync Failed</string>
+  <string name="workspace_detail_sync_check_mode">Sync Check Mode</string>
+  <string name="workspace_detail_sync_check_mode_fast">Quick Check</string>
+  <string name="workspace_detail_sync_check_mode_accurate">Full Check</string>
+  <string name="workspace_detail_sync_check_mode_fast_desc">Quick check only compares file sizes to detect differences. If content changes are so small that the file size barely changes, they may be missed.</string>
+  <string name="workspace_detail_sync_scanning_title">Scanning for changes…</string>
+  <string name="workspace_detail_sync_scanning_files">Scanned %1$d files</string>
+  <string name="workspace_detail_sync_scanning_files_of">Scanned %1$d/%2$d files</string>
+  <string name="workspace_detail_sync_checking_content">Verifying content %1$d/%2$d</string>
+  <string name="workspace_detail_sync_executing_title">Syncing…</string>
 </resources>

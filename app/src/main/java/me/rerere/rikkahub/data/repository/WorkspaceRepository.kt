@@ -10,6 +10,7 @@ import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.db.dao.WorkspaceDAO
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
+import me.rerere.rikkahub.data.sync.SyncSnapshot
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.workspace.RootfsInstallProgress
 import me.rerere.workspace.RootfsInstaller
@@ -19,6 +20,7 @@ import me.rerere.workspace.WorkspaceManager
 import me.rerere.workspace.WorkspaceShellStatus
 import me.rerere.workspace.WorkspaceStorageArea
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
 import kotlin.uuid.Uuid
@@ -335,6 +337,36 @@ class WorkspaceRepository(
     suspend fun updateWorkspace(workspace: WorkspaceEntity) {
         dao.upsert(workspace)
     }
+
+    // ---- 「导回原处」同步快照 ----
+
+    /** 工作区 FILES 区根目录（内部同步扫描基目录） */
+    suspend fun workspaceFilesDir(id: String): File? = withContext(Dispatchers.IO) {
+        dao.getById(id)?.let { manager.filesDir(it.root) }
+    }
+
+    /** 读取上次同步快照；不存在或解析失败返回 null */
+    suspend fun readSyncSnapshot(id: String): SyncSnapshot? = withContext(Dispatchers.IO) {
+        val workspace = dao.getById(id) ?: return@withContext null
+        val file = syncSnapshotFile(workspace.root)
+        if (!file.exists()) return@withContext null
+        runCatching {
+            JsonInstant.decodeFromString<SyncSnapshot>(file.readText())
+        }.getOrNull()
+    }
+
+    /** 写入同步快照（存放在工作区私有目录 .rikkahub/sync_snapshot.json，不入库） */
+    suspend fun writeSyncSnapshot(id: String, snapshot: SyncSnapshot): Boolean = withContext(Dispatchers.IO) {
+        val workspace = dao.getById(id) ?: return@withContext false
+        runCatching {
+            val file = syncSnapshotFile(workspace.root)
+            file.parentFile?.mkdirs()
+            file.writeText(JsonInstant.encodeToString(snapshot))
+        }.isSuccess
+    }
+
+    private fun syncSnapshotFile(root: String): File =
+        File(manager.workspaceDir(root), ".rikkahub/sync_snapshot.json")
 
     companion object {
         private const val TAG = "WorkspaceRepository"

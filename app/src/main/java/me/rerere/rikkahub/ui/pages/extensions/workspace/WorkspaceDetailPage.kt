@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -49,6 +50,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -70,6 +72,7 @@ import me.rerere.hugeicons.stroke.Share08
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.ai.tools.resolveWorkspaceToolApproval
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
+import me.rerere.rikkahub.data.sync.SyncCheckMode
 import androidx.compose.ui.res.stringResource
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -114,6 +117,14 @@ fun WorkspaceDetailPage(id: String) {
             enableGitignore = ws.enableGitignore,
             customIgnorePatterns = ws.customIgnorePatterns,
         )
+    }
+
+    // 「导回原处」：原目录权限失效后重新选择目录
+    val syncSourcePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree(),
+    ) { treeUri ->
+        if (treeUri == null) return@rememberLauncherForActivityResult
+        vm.onSyncSourcePicked(context, treeUri)
     }
 
     val filePicker = rememberLauncherForActivityResult(
@@ -244,6 +255,7 @@ fun WorkspaceDetailPage(id: String) {
                     onToolApprovalChange = vm::setToolApproval,
                     onEnableGitignoreChange = vm::setEnableGitignore,
                     onCustomIgnoreChange = vm::setCustomIgnorePatterns,
+                    onSyncCheckModeChange = vm::setSyncCheckMode,
                 )
 
                 1 -> WorkspaceFilesPage(
@@ -251,6 +263,12 @@ fun WorkspaceDetailPage(id: String) {
                     contentPadding = PaddingValues(),
                     onSelectArea = vm::selectArea,
                     onGoUp = vm::goUp,
+                    onSyncToSource = { entry ->
+                        // 仅对导入的根目录（与快照中的 syncRoot 同名）提供「导回原处」
+                        if (entry.isDirectory && entry.name == state.syncRoot) {
+                            vm.prepareSyncPreview(context)
+                        }
+                    },
                     onOpen = { entry ->
                         when {
                             entry.isDirectory -> vm.open(entry)
@@ -359,6 +377,54 @@ fun WorkspaceDetailPage(id: String) {
             Text(stringResource(R.string.workspace_detail_will_delete, entry.path))
         }
     }
+
+    // 「导回原处」：同步弹窗（检测中 → 结果确认 → 执行中，同一弹窗内按状态机切换）
+    when (state.syncPhase) {
+        SyncPhase.SCANNING, SyncPhase.PREVIEW, SyncPhase.EXECUTING -> {
+            WorkspaceSyncDialog(
+                phase = state.syncPhase,
+                preview = state.syncPreview,
+                progress = state.syncProgress,
+                onConfirm = { vm.confirmSync(context) },
+                onCancel = vm::cancelSync,
+            )
+        }
+
+        else -> Unit
+    }
+
+    // 「导回原处」：原始目录权限失效，引导重新选择
+    if (state.syncSourceLost) {
+        AlertDialog(
+            onDismissRequest = vm::dismissSyncSourceLost,
+            title = { Text(stringResource(R.string.workspace_detail_sync_source_lost_title)) },
+            text = { Text(stringResource(R.string.workspace_detail_sync_source_lost)) },
+            confirmButton = {
+                TextButton(onClick = { syncSourcePicker.launch(null) }) {
+                    Text(stringResource(R.string.workspace_detail_sync_reselect))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = vm::dismissSyncSourceLost) {
+                    Text(stringResource(R.string.common_cancel))
+                }
+            },
+        )
+    }
+
+    // 「导回原处」：同步失败
+    state.syncError?.let { message ->
+        AlertDialog(
+            onDismissRequest = vm::clearSyncError,
+            title = { Text(stringResource(R.string.workspace_detail_sync_failed_title)) },
+            text = { Text(message) },
+            confirmButton = {
+                TextButton(onClick = vm::clearSyncError) {
+                    Text(stringResource(R.string.common_confirm))
+                }
+            },
+        )
+    }
 }
 
 @Composable
@@ -369,6 +435,7 @@ private fun WorkspaceBasicPage(
     onToolApprovalChange: (String, Boolean) -> Unit,
     onEnableGitignoreChange: (Boolean) -> Unit,
     onCustomIgnoreChange: (String) -> Unit,
+    onSyncCheckModeChange: (SyncCheckMode) -> Unit,
 ) {
     val shellStatus = workspace?.shellStatus
     val installing = installProgress != null || shellStatus == WorkspaceShellStatus.INSTALLING.name
@@ -450,6 +517,7 @@ private fun WorkspaceBasicPage(
                 workspace = workspace,
                 onEnableGitignoreChange = onEnableGitignoreChange,
                 onCustomIgnoreChange = onCustomIgnoreChange,
+                onSyncCheckModeChange = onSyncCheckModeChange,
             )
         }
 
@@ -648,6 +716,7 @@ private fun WorkspaceFilesPage(
     contentPadding: PaddingValues,
     onSelectArea: (WorkspaceStorageArea) -> Unit,
     onGoUp: () -> Unit,
+    onSyncToSource: (WorkspaceFileEntry) -> Unit,
     onOpen: (WorkspaceFileEntry) -> Unit,
     onDelete: (WorkspaceFileEntry) -> Unit,
     onExport: (WorkspaceFileEntry) -> Unit,
@@ -686,12 +755,26 @@ private fun WorkspaceFilesPage(
         }
 
         items(state.entries, key = { "${state.area.name}:${it.path}" }) { entry ->
+            val isSyncRoot = state.area == WorkspaceStorageArea.FILES &&
+                state.path.isBlank() &&
+                entry.isDirectory &&
+                entry.name == state.syncRoot
             WorkspaceFileCard(
                 entry = entry,
                 onOpen = { onOpen(entry) },
                 onDelete = { onDelete(entry) },
                 onExport = { onExport(entry) },
                 onShare = { onShare(entry) },
+                onSyncToSource = if (isSyncRoot) {
+                    { onSyncToSource(entry) }
+                } else {
+                    null
+                },
+                isSyncRoot = isSyncRoot,
+                // 仅执行写入阶段在卡片顶部显示细进度线
+                syncProgress = state.syncProgress
+                    ?.takeIf { it.stage == SyncProgressStage.EXECUTE }
+                    ?.let { it.done to it.total },
             )
         }
     }
@@ -754,6 +837,9 @@ private fun WorkspaceFileCard(
     onDelete: () -> Unit,
     onExport: () -> Unit,
     onShare: () -> Unit,
+    onSyncToSource: (() -> Unit)? = null,
+    isSyncRoot: Boolean = false,
+    syncProgress: Pair<Int, Int>? = null,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
@@ -763,12 +849,26 @@ private fun WorkspaceFileCard(
             .clickable(onClick = onOpen),
         colors = CustomColors.cardColorsOnSurfaceContainer,
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        Box {
+            // 「导回原处」同步进度：仅同步根目录卡片顶部显示一条 2dp 细线（零布局偏移）
+            if (isSyncRoot && syncProgress != null) {
+                val (done, total) = syncProgress
+                LinearProgressIndicator(
+                    progress = { if (total > 0) done.toFloat() / total else 0f },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(2.dp)
+                        .align(Alignment.TopCenter),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = Color.Transparent,
+                )
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
             Icon(
                 imageVector = if (entry.isDirectory) HugeIcons.Folder01 else HugeIcons.File02,
                 contentDescription = null,
@@ -835,6 +935,21 @@ private fun WorkspaceFileCard(
                             },
                         )
                     }
+                    if (onSyncToSource != null) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.workspace_detail_sync_to_source)) },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = HugeIcons.ArrowTurnBackward,
+                                    contentDescription = null,
+                                )
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                onSyncToSource()
+                            },
+                        )
+                    }
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.common_delete), color = MaterialTheme.colorScheme.error) },
                         leadingIcon = {
@@ -850,6 +965,7 @@ private fun WorkspaceFileCard(
                         },
                     )
                 }
+            }
             }
         }
     }
@@ -907,6 +1023,7 @@ private fun WorkspaceImportSettingsCard(
     workspace: WorkspaceEntity?,
     onEnableGitignoreChange: (Boolean) -> Unit,
     onCustomIgnoreChange: (String) -> Unit,
+    onSyncCheckModeChange: (SyncCheckMode) -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -967,6 +1084,36 @@ private fun WorkspaceImportSettingsCard(
                 enabled = workspace != null,
                 minLines = 2,
             )
+
+            // 同步检查模式：快速（仅尺寸）/ 完整（校验内容）
+            val selectedMode = SyncCheckMode.from(workspace?.syncCheckMode)
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = stringResource(R.string.workspace_detail_sync_check_mode),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                    val options = listOf(
+                        SyncCheckMode.FAST to stringResource(R.string.workspace_detail_sync_check_mode_fast),
+                        SyncCheckMode.ACCURATE to stringResource(R.string.workspace_detail_sync_check_mode_accurate),
+                    )
+                    options.forEachIndexed { index, (mode, label) ->
+                        SegmentedButton(
+                            selected = selectedMode == mode,
+                            onClick = { onSyncCheckModeChange(mode) },
+                            shape = SegmentedButtonDefaults.itemShape(index, options.size),
+                            enabled = workspace != null,
+                        ) {
+                            Text(label)
+                        }
+                    }
+                }
+                Text(
+                    text = stringResource(R.string.workspace_detail_sync_check_mode_fast_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }

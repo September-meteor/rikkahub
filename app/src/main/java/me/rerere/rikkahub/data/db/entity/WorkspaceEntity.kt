@@ -37,6 +37,15 @@ data class WorkspaceEntity(
     val enableGitignore: Boolean = true,
     @ColumnInfo("custom_ignore_patterns", defaultValue = "")
     val customIgnorePatterns: String = "",
+    // 「导回原处」：导入目录的原始 SAF tree URI
+    @ColumnInfo("source_tree_uri", defaultValue = "")
+    val sourceTreeUri: String = "",
+    // 是否成功持久化 takePersistableUriPermission（卸载重装 / 用户撤销后失效，需重新选择）
+    @ColumnInfo("source_uri_persisted", defaultValue = "0")
+    val sourceUriPersisted: Boolean = false,
+    // 「导回原处」同步检查模式（"fast" 快速仅比对尺寸 / "accurate" 完整校验内容）
+    @ColumnInfo("sync_check_mode", defaultValue = "accurate")
+    val syncCheckMode: String = "accurate",
 ) {
     fun toolApprovalOverrides(): Map<String, Boolean> = runCatching {
         JsonInstant.decodeFromString<Map<String, Boolean>>(toolApprovals)
