@@ -108,6 +108,7 @@ import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesPage
 import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesThemePage
 import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesNotificationPage
 import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesGeneralPage
+import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesExperimentalPage
 import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesUIPage
 import me.rerere.rikkahub.ui.pages.setting.SettingThemePage
 import me.rerere.rikkahub.ui.pages.setting.SettingDonatePage
@@ -133,7 +134,6 @@ import okhttp3.OkHttpClient
 import org.koin.android.ext.android.inject
 import org.koin.compose.koinInject
 import kotlin.uuid.Uuid
-import me.rerere.rikkahub.ui.pages.setting.SettingImageCompressionPage
 
 private const val TAG = "RouteActivity"
 
@@ -425,6 +425,10 @@ class RouteActivity : ComponentActivity() {
                                 SettingPreferencesUIPage()
                             }
 
+                            entry<Screen.SettingPreferencesExperimental> {
+                                SettingPreferencesExperimentalPage()
+                            }
+
                             entry<Screen.SettingProvider> {
                                 SettingProviderPage()
                             }
@@ -497,10 +501,6 @@ class RouteActivity : ComponentActivity() {
 
                             entry<Screen.Workspaces> {
                                 WorkspacePage()
-                            }
-
-                            entry<Screen.ImageCompression> {
-                                SettingImageCompressionPage()
                             }
 
                             entry<Screen.WorkspaceDetail> { key ->
@@ -659,6 +659,9 @@ sealed interface Screen : NavKey {
     data object SettingPreferencesUI : Screen
 
     @Serializable
+    data object SettingPreferencesExperimental : Screen
+
+    @Serializable
     data object SettingProvider : Screen
 
     @Serializable
@@ -702,9 +705,6 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object QuickMessages : Screen
-
-    @Serializable
-    data object ImageCompression : Screen
 
     @Serializable
     data object Prompts : Screen

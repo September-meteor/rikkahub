@@ -836,7 +836,7 @@
   <string name="setting_page_display_setting">Display Settings</string>
   <string name="setting_page_display_setting_desc">Manage display settings</string>
   <string name="setting_page_preferences">Preferences</string>
-  <string name="setting_page_preferences_desc">Theme, notifications, UI and general settings</string>
+  <string name="setting_page_preferences_desc">Theme, notifications, UI, general and experimental settings</string>
   <string name="setting_page_preferences_theme">Theme</string>
   <string name="setting_page_preferences_theme_desc">Dynamic color, theme, AMOLED dark mode</string>
   <string name="setting_page_preferences_notification">Notifications</string>
@@ -845,6 +845,8 @@
   <string name="setting_page_preferences_general_desc">Interaction behavior, scrolling, input settings</string>
   <string name="setting_page_preferences_ui">UI Preferences</string>
   <string name="setting_page_preferences_ui_desc">Message display, fonts, code blocks</string>
+  <string name="setting_page_preferences_experimental">Experimental Features</string>
+  <string name="setting_page_preferences_experimental_desc">Experimental features that may change or be removed</string>
   <string name="setting_page_documentation">Documentation</string>
   <string name="setting_page_documentation_desc">View app usage instructions and help documentation</string>
   <string name="setting_page_donate">Donate</string>

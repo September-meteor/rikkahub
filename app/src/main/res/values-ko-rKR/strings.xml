@@ -1097,7 +1097,7 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="setting_display_page_custom_font_remove">사용자 지정 글꼴 제거</string>
   <string name="setting_display_page_custom_font_title">사용자 지정 글꼴</string>
   <string name="setting_page_preferences">기본 설정</string>
-  <string name="setting_page_preferences_desc">테마, 알림, UI 및 일반 설정</string>
+  <string name="setting_page_preferences_desc">테마, 알림, UI, 일반 및 실험적 기능 설정</string>
   <string name="setting_page_preferences_theme">테마</string>
   <string name="setting_page_preferences_theme_desc">다이나믹 색상, 테마, AMOLED 다크 모드</string>
   <string name="setting_page_preferences_notification">알림</string>
@@ -1106,6 +1106,8 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="setting_page_preferences_general_desc">상호작용 방식, 스크롤, 입력 설정</string>
   <string name="setting_page_preferences_ui">UI 환경설정</string>
   <string name="setting_page_preferences_ui_desc">메시지 표시, 글꼴, 코드 블록</string>
+  <string name="setting_page_preferences_experimental">실험적 기능</string>
+  <string name="setting_page_preferences_experimental_desc">변경되거나 제거될 수 있는 실험적 기능</string>
   <string name="skills_page_import_from_file">파일에서 가져오기</string>
   <string name="skills_page_add_manually">수동으로 추가</string>
   <string name="setting_model_page_tab_model">모델</string>

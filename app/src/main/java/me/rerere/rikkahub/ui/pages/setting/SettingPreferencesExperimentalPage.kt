@@ -42,7 +42,7 @@ import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
 
 @Composable
-fun SettingImageCompressionPage(vm: SettingVM = koinViewModel()) {
+fun SettingPreferencesExperimentalPage(vm: SettingVM = koinViewModel()) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val settings by vm.settings.collectAsStateWithLifecycle()
     val focusManager = LocalFocusManager.current
@@ -56,7 +56,7 @@ fun SettingImageCompressionPage(vm: SettingVM = koinViewModel()) {
     Scaffold(
         topBar = {
             LargeFlexibleTopAppBar(
-                title = { Text(stringResource(R.string.image_compression_title)) },
+                title = { Text(stringResource(R.string.setting_page_preferences_experimental)) },
                 navigationIcon = { BackButton() },
                 scrollBehavior = scrollBehavior,
                 colors = CustomColors.topBarColors
@@ -79,10 +79,12 @@ fun SettingImageCompressionPage(vm: SettingVM = koinViewModel()) {
             item {
                 CardGroup(
                     modifier = Modifier.padding(horizontal = 8.dp),
+                    title = { Text(stringResource(R.string.image_compression_title)) },
                 ) {
                     item(
                         leadingContent = { Icon(HugeIcons.ImageUpload, null) },
                         headlineContent = { Text(stringResource(R.string.image_compression_enable)) },
+                        supportingContent = { Text(stringResource(R.string.image_compression_desc)) },
                         trailingContent = {
                             Switch(
                                 checked = settings.enableImageCompression,
