@@ -1293,5 +1293,22 @@
   <string name="setting_update_reminder_pause_days">%1$d 天</string>
   <string name="setting_update_reminder_resume_now">立即恢復</string>
   <string name="reasoning_max">最大</string>
+  <string name="image_compression_title">圖片壓縮</string>
+  <string name="image_compression_desc">傳送前自動壓縮過大的圖片</string>
+  <string name="image_compression_enable">傳送前壓縮大圖</string>
+  <string name="image_compression_max_dimension">最大邊長</string>
+  <string name="safe_mode_enter_app">進入應用程式</string>
+  <string name="setting_tts_page_default_playback_speed">預設播放速度</string>
+  <string name="setting_tts_page_default_playback_speed_description">在本機套用至每個 TTS 提供者，不會變更其合成設定。</string>
+  <string name="setting_tts_page_fish_audio_speed_description">語音速度（0.5 - 2.0，1.0 為正常語速）</string>
+  <string name="setting_tts_page_temperature">溫度</string>
+  <string name="setting_tts_page_temperature_description">控制語音的隨機性（0.0 - 1.0，越高越有表現力）</string>
+  <string name="theme_name_claude">Claude</string>
+  <string name="workspace_detail_import_directory">匯入目錄</string>
+  <string name="workspace_detail_import_settings">匯入設定</string>
+  <string name="workspace_detail_import_settings_desc">控制目錄匯入時的過濾行為</string>
+  <string name="workspace_detail_enable_gitignore">遞迴解析 .gitignore</string>
+  <string name="workspace_detail_enable_gitignore_desc">匯入時自動跳過 .gitignore 中忽略的檔案與目錄</string>
+  <string name="workspace_detail_custom_ignore">自訂排除模式</string>
+  <string name="workspace_detail_custom_ignore_hint">用逗號或換行分隔項目，例如：node_modules, .git, build</string>
 </resources>
-

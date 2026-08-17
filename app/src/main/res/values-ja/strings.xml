@@ -1295,5 +1295,22 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_update_reminder_pause_days">%1$d日間</string>
   <string name="setting_update_reminder_resume_now">今すぐ再開</string>
   <string name="reasoning_max">最大</string>
+  <string name="image_compression_title">画像圧縮</string>
+  <string name="image_compression_desc">AIに送信する前に大きな画像を圧縮</string>
+  <string name="image_compression_enable">大きな画像を圧縮</string>
+  <string name="image_compression_max_dimension">最大辺長</string>
+  <string name="safe_mode_enter_app">アプリに入る</string>
+  <string name="setting_tts_page_default_playback_speed">デフォルト再生速度</string>
+  <string name="setting_tts_page_default_playback_speed_description">すべてのTTSプロバイダーにローカルで適用され、合成設定は変更されません。</string>
+  <string name="setting_tts_page_fish_audio_speed_description">音声速度 (0.5 - 2.0、1.0が標準)</string>
+  <string name="setting_tts_page_temperature">温度</string>
+  <string name="setting_tts_page_temperature_description">音声のランダム性を制御（0.0 - 1.0、高いほど表現力豊か）</string>
+  <string name="theme_name_claude">Claude</string>
+  <string name="workspace_detail_import_directory">ディレクトリをインポート</string>
+  <string name="workspace_detail_import_settings">インポート設定</string>
+  <string name="workspace_detail_import_settings_desc">ディレクトリインポート時のフィルタリング動作を制御</string>
+  <string name="workspace_detail_enable_gitignore">.gitignore を再帰的に解析</string>
+  <string name="workspace_detail_enable_gitignore_desc">インポート時に .gitignore で無視されているファイルやディレクトリを自動的にスキップ</string>
+  <string name="workspace_detail_custom_ignore">カスタム除外パターン</string>
+  <string name="workspace_detail_custom_ignore_hint">カンマまたは改行で項目を区切ります。例: node_modules, .git, build</string>
 </resources>
-

@@ -1295,5 +1295,22 @@
   <string name="setting_update_reminder_pause_days">%1$d дн.</string>
   <string name="setting_update_reminder_resume_now">Возобновить сейчас</string>
   <string name="reasoning_max">Максимум</string>
+  <string name="image_compression_title">Сжатие изображений</string>
+  <string name="image_compression_desc">Сжимать большие изображения перед отправкой в ИИ</string>
+  <string name="image_compression_enable">Сжимать большие изображения</string>
+  <string name="image_compression_max_dimension">Максимальный размер стороны</string>
+  <string name="safe_mode_enter_app">Войти в приложение</string>
+  <string name="setting_tts_page_default_playback_speed">Скорость воспроизведения по умолчанию</string>
+  <string name="setting_tts_page_default_playback_speed_description">Применяется локально ко всем поставщикам TTS, не изменяя их настройки синтеза.</string>
+  <string name="setting_tts_page_fish_audio_speed_description">Скорость речи (0.5 - 2.0, 1.0 — нормальная)</string>
+  <string name="setting_tts_page_temperature">Температура</string>
+  <string name="setting_tts_page_temperature_description">Контроль случайности голоса (0.0 - 1.0, выше — выразительнее)</string>
+  <string name="theme_name_claude">Claude</string>
+  <string name="workspace_detail_import_directory">Импортировать папку</string>
+  <string name="workspace_detail_import_settings">Настройки импорта</string>
+  <string name="workspace_detail_import_settings_desc">Управление поведением фильтрации при импорте папки</string>
+  <string name="workspace_detail_enable_gitignore">Рекурсивно анализировать .gitignore</string>
+  <string name="workspace_detail_enable_gitignore_desc">Автоматически пропускать файлы и папки, игнорируемые в .gitignore, при импорте</string>
+  <string name="workspace_detail_custom_ignore">Пользовательский шаблон исключения</string>
+  <string name="workspace_detail_custom_ignore_hint">Разделяйте элементы запятыми или переносами строк, например: node_modules, .git, build</string>
 </resources>
-

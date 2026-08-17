@@ -1309,4 +1309,8 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="workspace_detail_enable_gitignore_desc">导入时自动跳过 .gitignore 中忽略的文件和目录</string>
   <string name="workspace_detail_custom_ignore">自定义排除模式</string>
   <string name="workspace_detail_custom_ignore_hint">用逗号或换行分隔，如: node_modules, .git, build</string>
+  <string name="safe_mode_enter_app">进入应用</string>
+  <string name="setting_tts_page_default_playback_speed">默认播放速度</string>
+  <string name="setting_tts_page_default_playback_speed_description">本地应用于所有 TTS 提供商，不改变其合成设置。</string>
+  <string name="theme_name_claude">Claude</string>
 </resources>

@@ -1295,5 +1295,22 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="setting_update_reminder_pause_days">%1$d일</string>
   <string name="setting_update_reminder_resume_now">지금 재개</string>
   <string name="reasoning_max">최대</string>
+  <string name="image_compression_title">이미지 압축</string>
+  <string name="image_compression_desc">AI에 보내기 전에 큰 이미지를 압축합니다</string>
+  <string name="image_compression_enable">큰 이미지 압축</string>
+  <string name="image_compression_max_dimension">최대 변 길이</string>
+  <string name="safe_mode_enter_app">앱 들어가기</string>
+  <string name="setting_tts_page_default_playback_speed">기본 재생 속도</string>
+  <string name="setting_tts_page_default_playback_speed_description">모든 TTS 제공업체에 로컬로 적용되며 합성 설정은 변경되지 않습니다.</string>
+  <string name="setting_tts_page_fish_audio_speed_description">말하기 속도 (0.5 - 2.0, 1.0은 일반)</string>
+  <string name="setting_tts_page_temperature">온도</string>
+  <string name="setting_tts_page_temperature_description">음성의 무작위성 제어 (0.0 - 1.0, 높을수록 더 표현력 풍부)</string>
+  <string name="theme_name_claude">Claude</string>
+  <string name="workspace_detail_import_directory">디렉터리 가져오기</string>
+  <string name="workspace_detail_import_settings">가져오기 설정</string>
+  <string name="workspace_detail_import_settings_desc">디렉터리 가져오기 중 필터링 동작을 제어합니다</string>
+  <string name="workspace_detail_enable_gitignore">.gitignore 재귀적으로 구문 분석</string>
+  <string name="workspace_detail_enable_gitignore_desc">가져오기 중 .gitignore에서 무시된 파일과 디렉터리를 자동으로 건너뜁니다</string>
+  <string name="workspace_detail_custom_ignore">사용자 지정 제외 패턴</string>
+  <string name="workspace_detail_custom_ignore_hint">항목을 쉼표 또는 줄바꿈으로 구분하세요. 예: node_modules, .git, build</string>
 </resources>
-
