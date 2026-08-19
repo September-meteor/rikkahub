@@ -3,6 +3,7 @@ package me.rerere.rikkahub.ui.pages.extensions.workspace
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.SystemClock
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -33,6 +34,8 @@ import me.rerere.workspace.WorkspaceStorageArea
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 
 class WorkspaceDetailVM(
     private val id: String,
@@ -379,18 +382,40 @@ class WorkspaceDetailVM(
                 val snapshot = repository.readSyncSnapshot(id)
                 val syncRoot = snapshot?.syncRoot ?: (rootDoc.name ?: "imported")
 
+                // ---- 外部扫描 ETA 状态：累计速率 + 每秒 ticker 刷新倒计时 ----
+                val scanStartMs = SystemClock.elapsedRealtime()
+                var lastDone = 0
+                var scanTotal = WorkspaceSyncEngine.UNKNOWN_TOTAL
+                var scanEstimated = true
+                // 每秒重算 ETA 并重新上报，让「预估 x:xx」随时间流逝动态更新；
+                // 生命周期与外部扫描严格一致（外部扫描结束即取消，避免覆盖后续内部扫描/HASH 的进度）
+                val etaTicker = launch {
+                    while (isActive) {
+                        delay(1_000)
+                        val eta = computeEta(scanStartMs, lastDone, scanTotal)
+                        emitSyncProgress(SyncProgressStage.SCAN_EXTERNAL, lastDone, scanTotal, scanEstimated, eta)
+                    }
+                }
                 // C：外部当前状态（目录指纹短路 + 快照复用，文件 hash 懒加载；DocumentFile 进缓存）
-                val external = stageCatching(SyncStage.SCAN_EXTERNAL) {
-                    WorkspaceSyncEngine.scanExternalFast(
-                        context = context,
-                        rootDoc = rootDoc,
-                        rules = rules,
-                        snapshot = snapshot,
-                        docCache = docCache,
-                        onProgress = { done, total ->
-                            emitSyncProgress(SyncProgressStage.SCAN, done, total)
-                        },
-                    )
+                val external = try {
+                    stageCatching(SyncStage.SCAN_EXTERNAL) {
+                        WorkspaceSyncEngine.scanExternalFast(
+                            context = context,
+                            rootDoc = rootDoc,
+                            rules = rules,
+                            snapshot = snapshot,
+                            docCache = docCache,
+                            onProgress = { done, total, totalEstimated ->
+                                lastDone = done
+                                scanTotal = total
+                                scanEstimated = totalEstimated
+                                val eta = computeEta(scanStartMs, done, total)
+                                emitSyncProgress(SyncProgressStage.SCAN_EXTERNAL, done, total, totalEstimated, eta)
+                            },
+                        )
+                    }
+                } finally {
+                    etaTicker.cancel()
                 }
                 // A：内部当前状态（排除 .rikkahub 等元数据目录与被排除内容；快速模式不 eager 算 hash）
                 val filesDir = repository.workspaceFilesDir(id)
@@ -402,7 +427,7 @@ class WorkspaceDetailVM(
                             rules = rules,
                             withHash = mode == SyncCheckMode.ACCURATE,
                             onProgress = { done, total ->
-                                emitSyncProgress(SyncProgressStage.SCAN, done, total)
+                                emitSyncProgress(SyncProgressStage.SCAN_INTERNAL, done, total)
                             },
                         )
                     }
@@ -568,8 +593,34 @@ class WorkspaceDetailVM(
     // ---- 同步链路内部辅助 ----
 
     /** 进度回调统一入口：写入 [WorkspaceDetailState.syncProgress] */
-    private fun emitSyncProgress(stage: SyncProgressStage, done: Int, total: Int) {
-        _state.update { it.copy(syncProgress = SyncProgress(stage, done, total)) }
+    private fun emitSyncProgress(
+        stage: SyncProgressStage,
+        done: Int,
+        total: Int,
+        totalEstimated: Boolean = false,
+        etaSeconds: Long? = null,
+    ) {
+        _state.update { it.copy(syncProgress = SyncProgress(stage, done, total, totalEstimated, etaSeconds)) }
+    }
+
+    /**
+     * 外部扫描剩余时间估计（秒）：按累计平均速率线性外推。
+     * - done 过小（< [MIN_ETA_DONE]）或速率为 0 → 无法估算，返回 null（UI 隐藏 ETA）
+     * - 剩余 ≤ 0（估计滞后或已扫完）→ 返回 null
+     * - 返回原始秒数，由 UI 负责格式化与「>59:59」上限
+     */
+    private fun computeEta(startMs: Long, done: Int, total: Int): Long? {
+        if (done < MIN_ETA_DONE) return null
+        val remaining = total - done
+        if (remaining <= 0) return null
+        val elapsedSec = (SystemClock.elapsedRealtime() - startMs) / 1000.0
+        if (elapsedSec <= 0.0) return null
+        return (remaining * elapsedSec / done).toLong()
+    }
+
+    companion object {
+        /** done 达到该值后才开始估算 ETA（刚起步速率不可靠） */
+        private const val MIN_ETA_DONE = 5
     }
 
     /** 阶段隔离：非取消异常包装为 [SyncStageException]，供上层翻译成用户可读文案 */
@@ -783,15 +834,22 @@ enum class SyncPhase {
     ERROR,
 }
 
-/** 同步进度（阶段 + 完成数 + 总数；total 为负表示总数未知，UI 显示不确定进度） */
+/**
+ * 同步进度（阶段 + 完成数 + 总数；total 为负表示总数未知，UI 显示不确定进度）。
+ * - [totalEstimated]：仅外部扫描阶段有意义。true=总数仍用快照估计值（UI 文案「预估」）；
+ *   false=已发生偏差修正（UI 文案「更新」）
+ * - [etaSeconds]：外部扫描阶段的剩余时间估计（秒）；null=无法估算/不显示
+ */
 data class SyncProgress(
     val stage: SyncProgressStage,
     val done: Int,
     val total: Int,
+    val totalEstimated: Boolean = false,
+    val etaSeconds: Long? = null,
 )
 
-/** 进度阶段：扫描 / 内容校验 / 执行写入 */
-enum class SyncProgressStage { SCAN, HASH, EXECUTE }
+/** 进度阶段：外部扫描 / 内部扫描 / 内容校验 / 执行写入 */
+enum class SyncProgressStage { SCAN_EXTERNAL, SCAN_INTERNAL, HASH, EXECUTE }
 
 /** 预览阶段内部结果（syncRoot + 预览列表） */
 data class SyncPreviewResult(

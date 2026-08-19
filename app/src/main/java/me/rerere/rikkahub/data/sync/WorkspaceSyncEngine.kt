@@ -167,7 +167,17 @@ object WorkspaceSyncEngine {
      * - 指纹不一致 → 继续递归下钻；变更子树内的文件 hash 同样留空，按需懒计算。
      * - 遍历到的所有目录 / 文件 DocumentFile 按路径写入 [docCache]，供对比与执行阶段直接取用。
      *
-     * @param onProgress 每处理一个可见文件回调一次 (done, total)；total 为 [UNKNOWN_TOTAL]
+     * 进度总数（预估 → 修正）：
+     * 初始 total = 快照文件数（[SyncSnapshot.files] 大小，立即可得、零成本）；
+     * 扫描中每完成一个目录，用「实际子树文件数 − 快照子树文件数」修正 total，
+     * 使总数逐渐收敛到真实外部文件数（自底向上累加，逐层去重，避免嵌套目录重复修正）。
+     * 无快照时 total 保持 [UNKNOWN_TOTAL]（UI 显示不确定进度）。
+     *
+     * @param onProgress 每处理一个可见文件或完成一个目录回调一次
+     *  (done, total, totalEstimated)：
+     *  - done：已扫描文件数（不超过 total，避免估计滞后时显示超 100%）
+     *  - total：当前估计总数（无快照时为 [UNKNOWN_TOTAL]）
+     *  - totalEstimated：true=仍用快照估计数（UI 显示「预估」）；false=已发生偏差修正（UI 显示「更新」）
      */
     suspend fun scanExternalFast(
         context: Context,
@@ -175,7 +185,7 @@ object WorkspaceSyncEngine {
         rules: WorkspaceIgnoreRules,
         snapshot: SyncSnapshot?,
         docCache: DocumentCache? = null,
-        onProgress: suspend (done: Int, total: Int) -> Unit = { _, _ -> },
+        onProgress: suspend (done: Int, total: Int, totalEstimated: Boolean) -> Unit = { _, _, _ -> },
     ): ExternalScanResult = withContext(Dispatchers.IO) {
         val resolver = context.contentResolver
         val snapshotFiles = snapshot?.files.orEmpty()
@@ -183,6 +193,23 @@ object WorkspaceSyncEngine {
         val files = linkedMapOf<String, SyncFileState>()
         val directories = linkedMapOf<String, DirFingerprint>()
         val emptyDirs = linkedSetOf<String>()
+
+        // 快照子树文件数（每个目录路径 → 该子树内可见文件总数），用于逐目录修正估计总数
+        val snapshotSubtreeCounts = subtreeFileCounts(snapshot)
+
+        // 估计总数：初始 = 快照文件数；扫描中逐目录修正；无快照则保持未知
+        var currentTotal = snapshot?.files?.size ?: UNKNOWN_TOTAL
+        // 是否已发生偏差修正（true 后 UI 文案从「预估」切到「更新」）
+        var corrected = false
+        // 每个目录已应用的修正量（自底向上去重：祖先目录的修正要扣除子孙已修正的部分）
+        val appliedDelta = mutableMapOf<String, Int>()
+
+        /** 上报进度：done 不超过 total，避免估计滞后时进度/文案超界 */
+        suspend fun reportProgress() {
+            val reportTotal = if (currentTotal >= 0) currentTotal else UNKNOWN_TOTAL
+            val reportDone = if (reportTotal >= 0) minOf(files.size, reportTotal) else files.size
+            onProgress(reportDone, reportTotal, !corrected)
+        }
 
         /** 返回该目录子树内的可见文件总数（用于判定空目录） */
         suspend fun walk(doc: DocumentFile, parentKey: String): Int {
@@ -221,7 +248,7 @@ object WorkspaceSyncEngine {
                         files[key] = SyncFileState(size = size, hash = "")
                         entries += "$name:f:$size"
                         directFileCount++
-                        onProgress(files.size, UNKNOWN_TOTAL)
+                        reportProgress()
                     }
                 }
             }
@@ -240,6 +267,25 @@ object WorkspaceSyncEngine {
                 }
             }
 
+            // 目录完成：用「实际子树数 − 快照子树数」修正估计总数。
+            // 由于子树嵌套，祖先目录的修正需扣除子孙目录已修正的部分（appliedDelta 自底向上累积）。
+            if (snapshot != null) {
+                val snapshotCount = snapshotSubtreeCounts[parentKey]
+                val ownDelta = if (snapshotCount == null) subtreeFileCount else subtreeFileCount - snapshotCount
+                val childrenApplied = appliedDelta.entries
+                    .filter { it.key.startsWith(prefix) }
+                    .sumOf { it.value }
+                val applied = ownDelta - childrenApplied
+                if (applied != 0) {
+                    currentTotal += applied
+                    corrected = true
+                    appliedDelta[parentKey] = applied
+                }
+            }
+
+            // 目录完成：上报修正后的总数（UI 据此更新「xxx」与「预估/更新」）
+            reportProgress()
+
             if (subtreeFileCount == 0 && parentKey.isNotEmpty()) {
                 emptyDirs += parentKey
             }
@@ -248,6 +294,27 @@ object WorkspaceSyncEngine {
 
         walk(rootDoc, "")
         ExternalScanResult(files, directories, emptyDirs)
+    }
+
+    /**
+     * 从快照目录指纹预计算每棵子树的可见文件总数（key 为目录相对路径，根目录为 ""）。
+     * 用于外部扫描的逐目录总数修正；快照缺失或为空返回空 Map。
+     * 递归深度与目录树深度一致（实际项目一般 < 50 层，安全）。
+     */
+    private fun subtreeFileCounts(snapshot: SyncSnapshot?): Map<String, Int> {
+        val dirs = snapshot?.directories ?: return emptyMap()
+        // 注意：根目录 key 为 ""，其 substringBeforeLast 结果仍是自身，若参与分组会形成自环导致无限递归，
+        // 因此必须排除空串（根目录没有父目录，只作为其他目录的父分组键存在）。
+        val childrenOf = dirs.keys
+            .filter { it.isNotEmpty() }
+            .groupBy { it.substringBeforeLast('/', "") }
+        val memo = mutableMapOf<String, Int>()
+        fun count(path: String): Int = memo.getOrPut(path) {
+            val fp = dirs[path] ?: return@getOrPut 0
+            fp.fileCount + (childrenOf[path]?.sumOf { count(it) } ?: 0)
+        }
+        dirs.keys.forEach { count(it) }
+        return memo
     }
 
     /**

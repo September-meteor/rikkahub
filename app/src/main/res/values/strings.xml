@@ -1332,7 +1332,10 @@
   <string name="workspace_detail_sync_check_mode_fast_desc">Quick check only compares file sizes to detect differences. If content changes are so small that the file size barely changes, they may be missed.</string>
   <string name="workspace_detail_sync_scanning_title">Scanning for changes…</string>
   <string name="workspace_detail_sync_scanning_files">Scanned %1$d files</string>
-  <string name="workspace_detail_sync_scanning_files_of">Scanned %1$d/%2$d files</string>
+  <string name="workspace_detail_sync_scanning_files_eta">Scanned %1$d/%2$d files (est. %3$s)</string>
+  <string name="workspace_detail_sync_scanning_files_eta_updated">Scanned %1$d/%2$d files (updated %3$s)</string>
+  <string name="workspace_detail_sync_scanning_files_no_eta">Scanned %1$d/%2$d files</string>
+  <string name="workspace_detail_sync_scanning_almost_done">Almost done</string>
   <string name="workspace_detail_sync_checking_content">Verifying content %1$d/%2$d</string>
   <string name="workspace_detail_sync_executing_title">Syncing…</string>
 </resources>
