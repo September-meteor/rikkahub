@@ -1,8 +1,10 @@
 package me.rerere.rikkahub.ui.components.message
 
 import android.content.Intent
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -12,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
@@ -29,13 +32,17 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
+import androidx.compose.foundation.combinedClickable
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.ui.UIMessagePart
@@ -51,26 +58,77 @@ import org.koin.compose.koinInject
 import java.io.File
 
 private const val DEFAULT_VISIBLE_COUNT = 3
-private val WORKSPACE_FILE_TOOL_NAMES = setOf("workspace_write_file", "workspace_edit_file")
+
+/** 提取消息中被修改的工作区文件路径（write/edit 工具入参 + shell 变更 metadata） */
+internal fun extractEditedFilesPaths(parts: List<UIMessagePart>): List<String> =
+    parts.filterIsInstance<UIMessagePart.Tool>()
+        .filter { it.isExecuted }
+        .flatMap { tool ->
+            when (tool.toolName) {
+                "workspace_write_file", "workspace_edit_file" -> {
+                    tool.inputAsJson().jsonObject["path"]?.jsonPrimitive?.contentOrNull
+                        ?.let { listOf(it) }
+                        ?: emptyList()
+                }
+                "workspace_shell" -> {
+                    tool.output.filterIsInstance<UIMessagePart.Text>()
+                        .firstOrNull()
+                        ?.metadata
+                        ?.get("workspaceChanges")
+                        ?.jsonArray
+                        ?.mapNotNull { it.jsonPrimitive.contentOrNull }
+                        ?: emptyList()
+                }
+                else -> emptyList()
+            }
+        }
+        .filter { it.startsWith("/workspace") }
+        .distinct()
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun EditedFilesList(
     parts: List<UIMessagePart>,
     assistant: Assistant?,
+    showFullPath: Boolean = false,
 ) {
     val workspaceId = assistant?.workspaceId?.toString() ?: return
-    val editedFiles = remember(parts) {
-        parts.filterIsInstance<UIMessagePart.Tool>()
-            .filter { it.toolName in WORKSPACE_FILE_TOOL_NAMES && it.isExecuted }
-            .mapNotNull { tool ->
-                tool.inputAsJson().jsonObject["path"]?.jsonPrimitive?.contentOrNull
-            }
-            .distinct()
-    }
+    val editedFiles = remember(parts) { extractEditedFilesPaths(parts) }
     if (editedFiles.isEmpty()) return
 
+    // 显示路径：去掉 /workspace/，若当前消息所有文件的第二段目录一致则进一步去掉项目名段
+    val displayPaths = remember(editedFiles) {
+        // 1. 统一标准化相对路径：兼容 "/workspace" 和 "/workspace/"，确保不会残留前缀
+        val relPaths = editedFiles.map { 
+            it.removePrefix("/workspace").removePrefix("/") 
+        }
+        
+        // 2. 提取项目段（第一段目录）
+        val projectSegments = relPaths.map { it.substringBefore('/', "") }
+        
+        // 3. 判断是否所有文件都在同一个非空项目下，且都有子路径（包含 '/'）
+        val firstSegment = projectSegments.firstOrNull()
+        val allSameProject = firstSegment?.isNotEmpty() == true && 
+                             projectSegments.all { it == firstSegment } &&
+                             relPaths.all { it.contains('/') }
+    
+        editedFiles.mapIndexed { index, path ->
+            val rel = relPaths[index]
+            // 4. 核心防御：如果 rel 为空（即路径就是 workspace 本身），兜底显示 "workspace"
+            val safeRel = rel.ifEmpty { "workspace" } 
+            
+            val display = if (allSameProject) {
+                // 裁剪项目名后，如果变成空字符串（例如路径刚好是项目目录本身），则回退到 safeRel
+                safeRel.substringAfter('/', "").ifEmpty { safeRel }
+            } else {
+                safeRel
+            }
+            path to display
+        }.toMap()
+    }
+
     val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     val workspaceRepository: WorkspaceRepository = koinInject()
 
@@ -98,16 +156,42 @@ internal fun EditedFilesList(
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
+        maxItemsInEachRow = if (showFullPath) 1 else Int.MAX_VALUE,
     ) {
         visibleFiles.forEach { path ->
-            val fileName = remember(path) { path.substringAfterLast('/') }
+            val displayText = if (showFullPath) {
+                displayPaths.getValue(path)
+            } else {
+                path.substringAfterLast('/')
+            }
+            // 1. Surface 移除 onClick 和 onLongClick（点击/长按统一由 Row 的 combinedClickable 处理）
+            //    modifier 不加 fillMaxWidth：药丸 wrap-content，最长不超过父宽（超长由 horizontalScroll 滚动）
             Surface(
-                onClick = { selectedPath = path },
                 shape = RoundedCornerShape(50),
                 color = MaterialTheme.colorScheme.tertiaryContainer,
             ) {
+                // 2. 在 Row 的 modifier 末尾添加 combinedClickable
                 Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    modifier = Modifier
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                        .then(
+                            if (showFullPath) {
+                                Modifier.horizontalScroll(rememberScrollState())
+                            } else {
+                                Modifier
+                            }
+                        )
+                        .combinedClickable( // <--- 核心修复：统一处理点击和长按
+                            onClick = { selectedPath = path },
+                            onLongClick = {
+                                clipboardManager.setText(AnnotatedString(displayPaths.getValue(path)))
+                                Toast.makeText(
+                                    context,
+                                    context.getString(R.string.chat_message_copied_path),
+                                    Toast.LENGTH_SHORT,
+                                ).show()
+                            }
+                        ),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
@@ -117,33 +201,49 @@ internal fun EditedFilesList(
                         modifier = Modifier.size(16.dp),
                     )
                     Text(
-                        text = fileName,
+                        text = displayText,
                         style = MaterialTheme.typography.labelSmall,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.widthIn(max = 200.dp),
+                        softWrap = !showFullPath,
+                        overflow = if (showFullPath) TextOverflow.Clip else TextOverflow.Ellipsis,
+                        modifier = if (showFullPath) Modifier else Modifier.widthIn(max = 200.dp),
                     )
                 }
             }
         }
-        if (hasMore && !expanded) {
-            Surface(
-                onClick = { expanded = true },
-                shape = RoundedCornerShape(50),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            ) {
-                Text(
-                    text = "+${editedFiles.size - DEFAULT_VISIBLE_COUNT}",
-                    style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                )
+        if (hasMore) {
+            if (!expanded) {
+                Surface(
+                    onClick = { expanded = true },
+                    shape = RoundedCornerShape(50),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                ) {
+                    Text(
+                        text = "+${editedFiles.size - DEFAULT_VISIBLE_COUNT}",
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    )
+                }
+            } else {
+                Surface(
+                    onClick = { expanded = false },
+                    shape = RoundedCornerShape(50),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                ) {
+                    Text(
+                        text = "<",
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    )
+                }
             }
         }
     }
 
     if (selectedPath != null) {
         val path = selectedPath!!
-        val fileName = remember(path) { path.substringAfterLast('/') }
+        val fileName = path.substringAfterLast('/') // 导出用真实文件名
+        val sheetTitle = if (showFullPath) displayPaths.getValue(path) else fileName
         ModalBottomSheet(
             onDismissRequest = { selectedPath = null },
             sheetState = rememberBottomSheetState(
@@ -157,12 +257,19 @@ internal fun EditedFilesList(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text(
-                    text = fileName,
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                ) {
+                    Text(
+                        text = sheetTitle,
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Clip,
+                    )
+                }
                 Card(
                     onClick = {
                         val p = selectedPath ?: return@Card

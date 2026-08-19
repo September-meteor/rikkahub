@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.data.ai.tools
 
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.JsonObjectBuilder
@@ -254,16 +256,67 @@ private fun createShellTool(
             ?.coerceIn(1L, SHELL_TIMEOUT_MAX_SECONDS)
             ?.times(1_000L)
             ?: WorkspaceManager.DEFAULT_COMMAND_TIMEOUT_MS
-        val result = workspaceRepository.executeCommand(workspaceId, command, cwd, timeoutMillis)
+
+        // 1. 创建参考文件
+        val refFile = "/tmp/.ws_shell_ref_${System.currentTimeMillis()}"
+        runCatching {
+            val touchResult = workspaceRepository.executeCommand(
+                workspaceId,
+                "touch ${refFile.shellQuote()}",
+                "",
+                WorkspaceManager.DEFAULT_COMMAND_TIMEOUT_MS,
+            )
+            if (touchResult.exitCode != 0) throw RuntimeException("touch failed")
+        }
+
+        // 2. 执行实际命令
+        val result = workspaceRepository.executeCommand(
+            workspaceId, command, cwd, timeoutMillis
+        )
+
+        // 3. 收集 /workspace 内真正发生变更的文件（仅成功时）
+        val changes = if (result.exitCode == 0 && !result.timedOut) {
+            runCatching {
+                val findResult = workspaceRepository.executeCommand(
+                    workspaceId,
+                    "find /workspace -type f -newer ${refFile.shellQuote()} 2>/dev/null",
+                    "",
+                    WorkspaceManager.DEFAULT_COMMAND_TIMEOUT_MS,
+                )
+                if (findResult.exitCode == 0) {
+                    findResult.stdout.lines()
+                        .map { it.trim() }
+                        .filter { it.isNotEmpty() && it.startsWith("/workspace") }
+                        .distinct()
+                } else emptyList()
+            }.getOrDefault(emptyList())
+        } else emptyList()
+
+        // 4. 清理参考文件（不阻塞主流程）
+        runCatching {
+            workspaceRepository.executeCommand(
+                workspaceId,
+                "rm -f ${refFile.shellQuote()}",
+                "",
+                WorkspaceManager.DEFAULT_COMMAND_TIMEOUT_MS,
+            )
+        }
+
+        // 5. 返回结果，变更列表挂在 metadata 里，不污染 agent 可见的 output text
         listOf(
             UIMessagePart.Text(
-                buildJsonObject {
+                text = buildJsonObject {
                     put("exitCode", result.exitCode)
                     put("stdout", result.stdout)
                     put("stderr", result.stderr)
                     put("timedOut", result.timedOut)
                     if (result.truncated) put("truncated", true)
-                }.toString()
+                }.toString(),
+                metadata = if (changes.isNotEmpty()) {
+                    buildJsonObject {
+                        put("workspaceChanges", JsonArray(changes.map { JsonPrimitive(it) }))
+                    }
+                } else null
             )
         )
     },

@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ProvideTextStyle
@@ -45,6 +46,8 @@ import me.rerere.hugeicons.stroke.Copy01
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Edit01
 import me.rerere.hugeicons.stroke.FavouriteCircle
+import me.rerere.hugeicons.stroke.File02
+import me.rerere.hugeicons.stroke.Folder01
 import me.rerere.hugeicons.stroke.GitFork
 import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.hugeicons.stroke.Refresh03
@@ -75,6 +78,8 @@ fun ColumnScope.ChatMessageActionButtons(
     onOpenActionSheet: () -> Unit,
     onTranslate: ((UIMessage, Locale) -> Unit)? = null,
     onClearTranslation: (UIMessage) -> Unit = {},
+    onToggleFilePathDisplay: (() -> Unit)? = null,
+    showFullPath: Boolean = false,
 ) {
     val context = LocalContext.current
     val settings = LocalSettings.current
@@ -178,22 +183,35 @@ fun ColumnScope.ChatMessageActionButtons(
             }
         }
 
-        Icon(
-            imageVector = HugeIcons.MoreVertical,
-            contentDescription = stringResource(R.string.more_options),
-            modifier = Modifier
-                .clip(CircleShape)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = LocalIndication.current,
-                    onClick = {
-                        onOpenActionSheet()
+        if (onToggleFilePathDisplay != null) {
+            IconButton(
+                onClick = onToggleFilePathDisplay,
+                modifier = Modifier.size(32.dp)
+            ) {
+                Icon(
+                    imageVector = if (showFullPath) HugeIcons.File02 else HugeIcons.Folder01,
+                    contentDescription = stringResource(R.string.chat_message_toggle_file_path),
+                    modifier = Modifier.size(18.dp),
+                    tint = if (showFullPath) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
                     }
                 )
-                .padding(8.dp)
-                .size(16.dp),
-            tint = actionIconColor
-        )
+            }
+        }
+
+        IconButton(
+            onClick = onOpenActionSheet,
+            modifier = Modifier.size(32.dp)
+        ) {
+            Icon(
+                imageVector = HugeIcons.MoreVertical,
+                contentDescription = stringResource(R.string.more_options),
+                modifier = Modifier.size(16.dp),
+                tint = actionIconColor
+            )
+        }
 
         ChatMessageBranchSelector(
             node = node,

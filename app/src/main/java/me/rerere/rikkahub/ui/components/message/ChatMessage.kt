@@ -129,6 +129,9 @@ fun ChatMessage(
     )
     var showActionsSheet by remember { mutableStateOf(false) }
     var showSelectCopySheet by remember { mutableStateOf(false) }
+    var showFullPath by remember { mutableStateOf(false) }
+    // 仅当消息包含已执行的工作区文件工具（write/edit/shell 变更）时才显示路径切换按钮
+    val hasEditedFiles = remember(message) { extractEditedFilesPaths(message.parts).isNotEmpty() }
     val navController = LocalNavController.current
     val context = LocalContext.current
     val colorScheme = MaterialTheme.colorScheme
@@ -253,7 +256,11 @@ fun ChatMessage(
                         showActionsSheet = true
                     },
                     onTranslate = onTranslate,
-                    onClearTranslation = onClearTranslation
+                    onClearTranslation = onClearTranslation,
+                    showFullPath = showFullPath,
+                    onToggleFilePathDisplay = if (hasEditedFiles) {
+                        { showFullPath = !showFullPath }
+                    } else null,
                 )
             }
         }
@@ -261,6 +268,7 @@ fun ChatMessage(
         EditedFilesList(
             parts = message.parts,
             assistant = assistant,
+            showFullPath = showFullPath,
         )
 
         ProvideTextStyle(textStyle) {
