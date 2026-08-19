@@ -9,16 +9,33 @@
 ## Differences from Upstream
 
 ### Bug Fixes
-- **Markdown / HTML Nested List Rendering**:
-  - Fixed an issue where nested ordered lists were incorrectly rendered as part of the outer ordered list.
-  - Fixed an issue where interleaved text and nested lists within a list item caused some nested lists to be incorrectly stacked at the end.
-  - Optimized the vertical layout of multiple paragraphs/block-level elements within a list item to prevent horizontal compression.
-- **Release Build Compatibility**: Fixed an issue where certain page options might appear as garbled text in the release build due to class/property name obfuscation (ProGuard/R8).
+- **Markdown / HTML Nested List Rendering Issues**:
+  - Fixed an issue where child ordered lists were incorrectly rendered as outer ordered lists.
+  - Fixed an issue where child lists were incorrectly appended to the end when interleaved with text within a list item.
+  - Optimized the vertical layout of multi-paragraph/block-level elements within list items to prevent horizontal squeezing or overflow.
+- **Garbled Text in Release Builds**: Fixed an issue where class/property names in specific packages were obfuscated by R8, causing garbled text in options on certain pages.
+- **Workspace Temporary File Display Anomaly**: Fixed an issue where the UI incorrectly displayed non-existent temporary files as changed files when the Agent modified files using `workspace_shell`.
 
 ### New Features
-- **Image Compression**: Automatically compresses oversized images before sending. Can be toggled and configured (max dimension, default 2048px) under "Extensions -> Image Compression".
-- **Reasoning Copy**: Added a one-click copy button for the model's reasoning chain next to the AI message avatar.
-- **Reasoning Translation**: Added a translation button and a language selector next to the AI message avatar. Translation supports original/translated text toggling with streaming generation. The language selector uses flag emojis and defaults to the system language.
+- **Workspace Directory Import & Smart Filtering**:
+  - Supports one-click import of entire folders into the workspace, complete with an import progress UI.
+  - Built-in recursive `.gitignore` parsing (supports negation rules and anchoring), along with support for custom exclusion pattern configurations.
+- **Workspace Directory Sync Back**:
+  - Supports syncing workspace files back to the original SAF (Storage Access Framework) directory.
+  - Provides two difference checking modes: "Quick (size comparison only)" and "Full (CRC32 content verification)".
+  - Automatically generates an initial snapshot after import to optimize subsequent comparisons. The UI now includes a state-machine guided popup: Scan → Preview → Execute.
+- **Enhanced Workspace Change Display & Interaction**:
+  - Enhanced `workspace_shell` change detection; the list of changed files is automatically appended to the message metadata.
+  - Added a path display toggle switch, supporting seamless switching between "filename only" and "full relative path" (sharing the expanded/collapsed state).
+  - **Smart Trimming**: If all changed files belong to the same project directory, the project name prefix is automatically omitted to keep the interface clean.
+  - **UI Adaptation**: In full path mode, items are displayed in a single column with horizontal scrolling support to prevent long paths from wrapping. File tags support long-press to copy the current path to the clipboard, accompanied by a Toast notification.
+- **Image Compression**: Automatically compresses oversized images before sending them to the AI. Can be toggled and configured (max edge length, default 2048px) in `Preferences → Experimental Features → Image Compression` (chat preview remains in original resolution).
+- **Chain of Thought (CoT) Enhancements**:
+  - **One-Click Copy**: Added a one-click button next to the AI message avatar to copy the model's Chain of Thought.
+  - **Streaming Translation**: Added translation and language selection buttons next to the AI message avatar.
+    - Supports one-click toggling between original text and translated text.
+    - Translated text is generated in a streaming manner, just like the original CoT.
+    - The language button displays as a flag emoji, defaulting to the system language.
 
 ## Download & Installation
 
