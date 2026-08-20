@@ -26,6 +26,9 @@ import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
@@ -53,6 +56,7 @@ import me.rerere.rikkahub.data.ai.tools.local.LocalTools
 import me.rerere.rikkahub.data.ai.tools.createSearchTools
 import me.rerere.rikkahub.data.ai.tools.createSkillTools
 import me.rerere.rikkahub.data.ai.tools.createWorkspaceTools
+import me.rerere.rikkahub.data.ai.workspace.WorkspaceChangeScanner
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.ai.transformers.Base64ImageToLocalFileTransformer
 import me.rerere.rikkahub.data.ai.transformers.DocumentAsPromptTransformer
@@ -154,6 +158,7 @@ class ChatService(
     private val skillManager: SkillManager,
     private val workspaceRepository: WorkspaceRepository,
     private val folderRepository: FolderRepository,
+    private val workspaceChangeScanner: WorkspaceChangeScanner,
 ) {
     // workspace 系统提示注入 (依赖 workspaceRepository, 故在类内构造)
     private val workspaceReminderTransformer = WorkspaceReminderTransformer(workspaceRepository)
@@ -544,7 +549,7 @@ class ChatService(
                     if (assistant.enableRecentChatsReference) {
                         addAll(createConversationTools(conversationRepo, assistant.id))
                     }
-                    addAll(createWorkspaceToolsIfReady(assistant.workspaceId?.toString(), conversation.workspaceCwd))
+                    addAll(createWorkspaceToolsIfReady(assistant.workspaceId?.toString(), conversation.workspaceCwd, conversationId.toString()))
                     if (assistant.enabledSkills.isNotEmpty()) {
                         addAll(
                             createSkillTools(
@@ -594,6 +599,16 @@ class ChatService(
                 )
                 updateConversation(conversationId, updatedConversation)
 
+                // 后台变更扫描结果回填: 模型输出回复期间 find 已在后台完成,
+                // 这里把该工作区本轮的变更挂到本轮最后一条助手回复消息的 metadata 上
+                try {
+                    attachWorkspaceChanges(conversationId, assistant, updatedConversation)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    Log.w(TAG, "attachWorkspaceChanges failed", e)
+                }
+
                 // 生成结束：取消 Live Update 通知，后台时发送完成通知
                 appEventBus.emit(
                     AppEvent.ChatGenerationEnded(
@@ -641,7 +656,11 @@ class ChatService(
         }
     }
 
-    private suspend fun createWorkspaceToolsIfReady(workspaceId: String?, cwd: String? = null): List<Tool> {
+    private suspend fun createWorkspaceToolsIfReady(
+        workspaceId: String?,
+        cwd: String? = null,
+        conversationId: String,
+    ): List<Tool> {
         if (workspaceId.isNullOrBlank()) return emptyList()
         val workspace = workspaceRepository.getById(workspaceId) ?: return emptyList()
         if (workspace.shellStatus != WorkspaceShellStatus.READY.name) {
@@ -651,7 +670,72 @@ class ChatService(
             )
             return emptyList()
         }
-        return createWorkspaceTools(workspaceId, workspaceRepository, cwd)
+        return createWorkspaceTools(workspaceId, workspaceRepository, cwd, conversationId, workspaceChangeScanner)
+    }
+
+    /**
+     * 把后台变更扫描器积累的工作区变更，回填到本轮最后一条助手消息（回复本身）上。
+     * metadata 不参与模型上下文，仅供 UI 展示文件变更药丸；随消息一起持久化。
+     */
+    private suspend fun attachWorkspaceChanges(
+        conversationId: Uuid,
+        assistant: Assistant,
+        conversation: Conversation,
+    ) {
+        val workspaceId = assistant.workspaceId?.toString() ?: return
+        val changes = workspaceChangeScanner.consume(conversationId.toString(), workspaceId)
+        if (changes.isEmpty()) return
+
+        // 只取「最后一条用户消息之后」的助手消息，避免把本轮变更挂到历史轮的回复上
+        val allMessages = conversation.messageNodes.flatMap { it.messages }
+        val lastUserIndex = allMessages.indexOfLast { it.role == MessageRole.USER }
+        val turnMessages = if (lastUserIndex >= 0) allMessages.drop(lastUserIndex + 1) else allMessages
+        val targetMessage = turnMessages.lastOrNull { it.role == MessageRole.ASSISTANT } ?: return
+
+        val changesJson = JsonArray(changes.map { JsonPrimitive(it) })
+        val updated = conversation.copy(
+            messageNodes = conversation.messageNodes.map { node ->
+                node.copy(
+                    messages = node.messages.map { message ->
+                        if (message.id != targetMessage.id) return@map message
+                        val parts = message.parts.toMutableList()
+                        val textIndex = parts.indexOfFirst { it is UIMessagePart.Text }
+                        if (textIndex >= 0) {
+                            val text = parts[textIndex] as UIMessagePart.Text
+                            // 幂等: 已有变更 metadata 则不再覆盖
+                            if (text.metadata?.get("workspaceChanges") != null) return@map message
+                            parts[textIndex] = text.copy(
+                                metadata = buildJsonObject {
+                                    put("workspaceChanges", changesJson)
+                                }
+                            )
+                            return@map message.copy(parts = parts)
+                        }
+                        // 兜底: 本轮回复没有文本（如生成中途停止在纯工具阶段），
+                        // 挂到最后一条 workspace_shell 工具的输出上，避免变更丢失
+                        val toolIndex = parts.indexOfLast {
+                            it is UIMessagePart.Tool && it.toolName == "workspace_shell"
+                        }
+                        if (toolIndex < 0) return@map message
+                        val tool = parts[toolIndex] as UIMessagePart.Tool
+                        val output = tool.output.toMutableList()
+                        val outTextIndex = output.indexOfFirst { it is UIMessagePart.Text }
+                        if (outTextIndex < 0) return@map message
+                        val outText = output[outTextIndex] as UIMessagePart.Text
+                        if (outText.metadata?.get("workspaceChanges") != null) return@map message
+                        output[outTextIndex] = outText.copy(
+                            metadata = buildJsonObject {
+                                put("workspaceChanges", changesJson)
+                            }
+                        )
+                        message.copy(parts = parts.apply { this[toolIndex] = tool.copy(output = output) })
+                    }
+                )
+            }
+        )
+        if (updated != conversation) {
+            updateConversation(conversationId, updated)
+        }
     }
 
     // ---- 检查无效消息 ----

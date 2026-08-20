@@ -58,6 +58,7 @@ import androidx.compose.ui.util.fastForEachIndexed
 import androidx.core.content.FileProvider
 import androidx.core.net.toFile
 import androidx.core.net.toUri
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.debounce
 import kotlinx.serialization.json.jsonArray
@@ -79,6 +80,7 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.data.model.replaceRegexes
+import me.rerere.rikkahub.data.ai.workspace.WorkspaceChangeScanner
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.ui.components.richtext.ZoomableAsyncImage
 import me.rerere.rikkahub.ui.components.richtext.buildMarkdownPreviewHtml
@@ -94,6 +96,7 @@ import me.rerere.rikkahub.ui.theme.extendColors
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.utils.openUrl
 import me.rerere.rikkahub.utils.urlDecode
+import org.koin.compose.koinInject
 import java.util.Locale
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -104,6 +107,7 @@ fun ChatMessage(
     loading: Boolean = false,
     model: Model? = null,
     assistant: Assistant? = null,
+    conversationId: String? = null,
     lastMessage: Boolean = false,
     onFork: () -> Unit,
     onRegenerate: () -> Unit,
@@ -130,8 +134,27 @@ fun ChatMessage(
     var showActionsSheet by remember { mutableStateOf(false) }
     var showSelectCopySheet by remember { mutableStateOf(false) }
     var showFullPath by remember { mutableStateOf(false) }
-    // 仅当消息包含已执行的工作区文件工具（write/edit/shell 变更）时才显示路径切换按钮
-    val hasEditedFiles = remember(message) { extractEditedFilesPaths(message.parts).isNotEmpty() }
+
+    // 后台变更扫描器的实时结果：find 每完成一批就更新一次，生成期间即可看到变更药丸。
+    // 只对「当前最后一条消息」叠加实时变更，避免每条历史消息都重复展示同一批文件。
+    // 按 (conversationId, workspaceId) 隔离，同一工作区被多对话共享时互不串扰。
+    val workspaceScanner: WorkspaceChangeScanner = koinInject()
+    val liveWorkspaceChanges by workspaceScanner.liveChanges.collectAsStateWithLifecycle()
+    val liveKey = remember(conversationId, assistant, lastMessage) {
+        if (lastMessage && conversationId != null) {
+            assistant?.workspaceId?.toString()
+                ?.let { WorkspaceChangeScanner.ScanKey(conversationId, it) }
+        } else null
+    }
+    val liveForThisMessage = liveKey?.let { liveWorkspaceChanges[it].orEmpty() } ?: emptyList()
+
+    // 消息内文件（write/edit 入参 + 回复消息回填的 metadata）+ 实时变更
+    val editedFiles = remember(message, liveForThisMessage) {
+        (extractEditedFilesPaths(message.parts) + liveForThisMessage)
+            .filter { it.startsWith("/workspace") }
+            .distinct()
+    }
+    val hasEditedFiles = editedFiles.isNotEmpty()
     val navController = LocalNavController.current
     val context = LocalContext.current
     val colorScheme = MaterialTheme.colorScheme
@@ -266,7 +289,7 @@ fun ChatMessage(
         }
 
         EditedFilesList(
-            parts = message.parts,
+            editedFiles = editedFiles,
             assistant = assistant,
             showFullPath = showFullPath,
         )

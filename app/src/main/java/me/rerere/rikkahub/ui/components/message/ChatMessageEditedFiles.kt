@@ -59,41 +59,48 @@ import java.io.File
 
 private const val DEFAULT_VISIBLE_COUNT = 3
 
-/** 提取消息中被修改的工作区文件路径（write/edit 工具入参 + shell 变更 metadata） */
+/** 提取消息中被修改的工作区文件路径（write/edit 工具入参 + 消息级变更 metadata） */
 internal fun extractEditedFilesPaths(parts: List<UIMessagePart>): List<String> =
-    parts.filterIsInstance<UIMessagePart.Tool>()
-        .filter { it.isExecuted }
-        .flatMap { tool ->
-            when (tool.toolName) {
-                "workspace_write_file", "workspace_edit_file" -> {
-                    tool.inputAsJson().jsonObject["path"]?.jsonPrimitive?.contentOrNull
-                        ?.let { listOf(it) }
-                        ?: emptyList()
+    // 消息级 metadata：生成结束后回填到助手回复消息上的 workspaceChanges
+    parts.filterIsInstance<UIMessagePart.Text>()
+        .flatMap { part ->
+            part.metadata?.get("workspaceChanges")?.jsonArray
+                ?.mapNotNull { it.jsonPrimitive.contentOrNull }
+                .orEmpty()
+        } +
+        // 工具级：write/edit 工具入参 + shell 工具输出 metadata
+        parts.filterIsInstance<UIMessagePart.Tool>()
+            .filter { it.isExecuted }
+            .flatMap { tool ->
+                when (tool.toolName) {
+                    "workspace_write_file", "workspace_edit_file" -> {
+                        tool.inputAsJson().jsonObject["path"]?.jsonPrimitive?.contentOrNull
+                            ?.let { listOf(it) }
+                            ?: emptyList()
+                    }
+                    "workspace_shell" -> {
+                        tool.output.filterIsInstance<UIMessagePart.Text>()
+                            .firstOrNull()
+                            ?.metadata
+                            ?.get("workspaceChanges")
+                            ?.jsonArray
+                            ?.mapNotNull { it.jsonPrimitive.contentOrNull }
+                            ?: emptyList()
+                    }
+                    else -> emptyList()
                 }
-                "workspace_shell" -> {
-                    tool.output.filterIsInstance<UIMessagePart.Text>()
-                        .firstOrNull()
-                        ?.metadata
-                        ?.get("workspaceChanges")
-                        ?.jsonArray
-                        ?.mapNotNull { it.jsonPrimitive.contentOrNull }
-                        ?: emptyList()
-                }
-                else -> emptyList()
             }
-        }
-        .filter { it.startsWith("/workspace") }
-        .distinct()
+            .filter { it.startsWith("/workspace") }
+            .distinct()
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun EditedFilesList(
-    parts: List<UIMessagePart>,
+    editedFiles: List<String>,
     assistant: Assistant?,
     showFullPath: Boolean = false,
 ) {
     val workspaceId = assistant?.workspaceId?.toString() ?: return
-    val editedFiles = remember(parts) { extractEditedFilesPaths(parts) }
     if (editedFiles.isEmpty()) return
 
     // 显示路径：去掉 /workspace/，若当前消息所有文件的第二段目录一致则进一步去掉项目名段

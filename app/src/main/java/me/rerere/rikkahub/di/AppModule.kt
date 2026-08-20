@@ -6,6 +6,7 @@ import com.google.firebase.crashlytics.crashlytics
 import kotlinx.serialization.json.Json
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.ai.tools.local.LocalTools
+import me.rerere.rikkahub.data.ai.workspace.WorkspaceChangeScanner
 import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.service.ChatNotificationManager
 import me.rerere.rikkahub.service.ChatService
@@ -35,6 +36,13 @@ val appModule = module {
 
     single {
         AppScope()
+    }
+
+    single {
+        WorkspaceChangeScanner(
+            workspaceRepository = get(),
+            appScope = get(),
+        )
     }
 
     single<EmojiData> {
@@ -84,7 +92,8 @@ val appModule = module {
             filesManager = get(),
             skillManager = get(),
             workspaceRepository = get(),
-            folderRepository = get()
+            folderRepository = get(),
+            workspaceChangeScanner = get()
         )
     }
 

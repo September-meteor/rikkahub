@@ -1,10 +1,8 @@
 package me.rerere.rikkahub.data.ai.tools
 
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
@@ -13,6 +11,7 @@ import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.DiffMetadata
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.toMetadata
+import me.rerere.rikkahub.data.ai.workspace.WorkspaceChangeScanner
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.utils.generateUnifiedDiff
@@ -39,6 +38,8 @@ suspend fun createWorkspaceTools(
     workspaceId: String?,
     workspaceRepository: WorkspaceRepository,
     cwd: String? = null,
+    conversationId: String,
+    changeScanner: WorkspaceChangeScanner,
 ): List<Tool> {
     if (workspaceId.isNullOrBlank()) return emptyList()
     val approvalOverrides = workspaceRepository.getById(workspaceId)?.toolApprovalOverrides().orEmpty()
@@ -50,7 +51,7 @@ suspend fun createWorkspaceTools(
         createReadFileTool(workspaceId, ::needsApproval, workspaceRepository),
         createWriteFileTool(workspaceId, ::needsApproval, workspaceRepository),
         createEditFileTool(workspaceId, ::needsApproval, workspaceRepository),
-        createShellTool(workspaceId, ::needsApproval, workspaceRepository, shellCwd),
+        createShellTool(workspaceId, ::needsApproval, workspaceRepository, shellCwd, conversationId, changeScanner),
     )
 }
 
@@ -207,6 +208,8 @@ private fun createShellTool(
     needsApproval: (String) -> Boolean,
     workspaceRepository: WorkspaceRepository,
     defaultCwd: String? = null,
+    conversationId: String,
+    changeScanner: WorkspaceChangeScanner,
 ) = Tool(
     name = "workspace_shell",
     description = buildString {
@@ -257,52 +260,24 @@ private fun createShellTool(
             ?.times(1_000L)
             ?: WorkspaceManager.DEFAULT_COMMAND_TIMEOUT_MS
 
-        // 1. 创建参考文件
-        val refFile = "/tmp/.ws_shell_ref_${System.currentTimeMillis()}"
-        runCatching {
-            val touchResult = workspaceRepository.executeCommand(
-                workspaceId,
-                "touch ${refFile.shellQuote()}",
-                "",
-                WorkspaceManager.DEFAULT_COMMAND_TIMEOUT_MS,
-            )
-            if (touchResult.exitCode != 0) throw RuntimeException("touch failed")
+        // 命令与退出码包装进同一次 proot 进程（原来一次调用要 4 个进程: touch/命令/find/rm）。
+        // cutoff 在命令执行前记录（早于命令写入任何文件），后台扫描器以它为基准做 find。
+        val refCutoffMillis = System.currentTimeMillis()
+        val wrapped = buildString {
+            append(command)
+            append("\nrc=\$?\n")
+            append("exit \$rc\n")
         }
-
-        // 2. 执行实际命令
         val result = workspaceRepository.executeCommand(
-            workspaceId, command, cwd, timeoutMillis
+            workspaceId, wrapped, cwd, timeoutMillis
         )
 
-        // 3. 收集 /workspace 内真正发生变更的文件（仅成功时）
-        val changes = if (result.exitCode == 0 && !result.timedOut) {
-            runCatching {
-                val findResult = workspaceRepository.executeCommand(
-                    workspaceId,
-                    "find /workspace -type f -newer ${refFile.shellQuote()} 2>/dev/null",
-                    "",
-                    WorkspaceManager.DEFAULT_COMMAND_TIMEOUT_MS,
-                )
-                if (findResult.exitCode == 0) {
-                    findResult.stdout.lines()
-                        .map { it.trim() }
-                        .filter { it.isNotEmpty() && it.startsWith("/workspace") }
-                        .distinct()
-                } else emptyList()
-            }.getOrDefault(emptyList())
-        } else emptyList()
-
-        // 4. 清理参考文件（不阻塞主流程）
-        runCatching {
-            workspaceRepository.executeCommand(
-                workspaceId,
-                "rm -f ${refFile.shellQuote()}",
-                "",
-                WorkspaceManager.DEFAULT_COMMAND_TIMEOUT_MS,
-            )
+        // 变更检测交给后台扫描器: 与模型输出回复的时间重叠, 不再阻塞本次工具调用。
+        // 变更列表由 ChatService 在生成结束时回填到本工具消息的 metadata。
+        if (result.exitCode == 0 && !result.timedOut) {
+            changeScanner.poke(conversationId, workspaceId, refCutoffMillis)
         }
 
-        // 5. 返回结果，变更列表挂在 metadata 里，不污染 agent 可见的 output text
         listOf(
             UIMessagePart.Text(
                 text = buildJsonObject {
@@ -311,12 +286,7 @@ private fun createShellTool(
                     put("stderr", result.stderr)
                     put("timedOut", result.timedOut)
                     if (result.truncated) put("truncated", true)
-                }.toString(),
-                metadata = if (changes.isNotEmpty()) {
-                    buildJsonObject {
-                        put("workspaceChanges", JsonArray(changes.map { JsonPrimitive(it) }))
-                    }
-                } else null
+                }.toString()
             )
         )
     },

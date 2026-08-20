@@ -17,6 +17,14 @@ class RootfsPatcher {
         ensureLocale(etcDir, options.locale)
         ensureGroupNames(etcDir, options.groupIds.ifEmpty { currentSupplementaryGroupIds() })
         ensureTempDirs(linuxDir)
+        markPatched(linuxDir)
+    }
+
+    /** 是否已完成过一次性环境初始化（避免每次命令都重复 patch） */
+    fun isPatched(linuxDir: File): Boolean = File(linuxDir, PATCH_MARKER).isFile
+
+    private fun markPatched(linuxDir: File) {
+        File(linuxDir, PATCH_MARKER).writeText("1\n")
     }
 
     private fun ensureRootfsDns(
@@ -168,6 +176,7 @@ class RootfsPatcher {
     private companion object {
         private const val MAX_DNS_SERVERS = 3
         private const val DEFAULT_HOSTNAME = "localhost"
+        private const val PATCH_MARKER = ".rikkahub_patched_v1"
         private val WHITESPACE_REGEX = Regex("\\s+")
         private val LOCAL_RESOLVERS = setOf(
             "127.0.0.1",

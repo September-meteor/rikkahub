@@ -15,6 +15,9 @@ class ProotShellRunner(
     private val nativeLibraryDir: File,
     private val patcher: RootfsPatcher = RootfsPatcher(),
 ) : WorkspaceShellRunner {
+    /** 进程内已确认 patch 过的 rootfs 路径（避免每个命令都重复读标记文件） */
+    private val patchedInMemory = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
     override fun execute(context: WorkspaceShellContext): WorkspaceCommandResult {
         if (!context.linuxDir.hasUsableRootfs()) {
             return WorkspaceCommandResult(
@@ -42,7 +45,10 @@ class ProotShellRunner(
         }
 
         context.tempDir.mkdirs()
-        patcher.patch(context.linuxDir)
+        // P1: 一次性环境初始化, 打上标记后不再重复 patch（避免每次命令都读写 /etc 与 chmod）
+        if (patchedInMemory.add(context.linuxDir.absolutePath) && !patcher.isPatched(context.linuxDir)) {
+            patcher.patch(context.linuxDir)
+        }
         val process = ProcessBuilder(buildCommand(context, proot))
             .directory(context.filesDir)
             .redirectErrorStream(false)
@@ -96,7 +102,6 @@ class ProotShellRunner(
             "LANG=C.UTF-8",
             "LC_ALL=C.UTF-8",
             "/bin/bash",
-            "-l",
             "-c",
             // 命令通过位置参数传入, 避免任何转义; eval "$2" 对命令文本只求值一次, 等价于 bash -c "$cmd"
             "cd -- \"\$1\" && eval \"\$2\"",
