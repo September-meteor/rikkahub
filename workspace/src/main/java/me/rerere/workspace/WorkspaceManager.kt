@@ -71,11 +71,33 @@ class WorkspaceManager(
         area: WorkspaceStorageArea = WorkspaceStorageArea.FILES,
         fileName: String,
         inputStream: InputStream,
+        overwrite: Boolean = false,
     ): WorkspaceFileEntry {
         val areaRoot = areaDir(root, area)
         val targetPath = if (destinationPath.isBlank()) fileName else "$destinationPath/$fileName"
-        return fileSystem.importBytes(areaRoot, targetPath, inputStream)
+        return fileSystem.importBytes(areaRoot, targetPath, inputStream, overwrite)
     }
+
+    /** 确保目录存在（用于导入空目录） */
+    fun createDir(
+        root: String,
+        path: String,
+        area: WorkspaceStorageArea = WorkspaceStorageArea.FILES,
+    ): WorkspaceFileEntry = fileSystem.ensureDirectory(areaDir(root, area), path)
+
+    /** 目标路径是否存在（用于上传冲突检测） */
+    fun fileExists(
+        root: String,
+        path: String,
+        area: WorkspaceStorageArea = WorkspaceStorageArea.FILES,
+    ): Boolean = fileSystem.resolve(areaDir(root, area), path).exists()
+
+    /** 目标路径是否为目录（用于上传类型冲突检测） */
+    fun isDirectory(
+        root: String,
+        path: String,
+        area: WorkspaceStorageArea = WorkspaceStorageArea.FILES,
+    ): Boolean = fileSystem.resolve(areaDir(root, area), path).isDirectory
 
     fun fileSize(
         root: String,

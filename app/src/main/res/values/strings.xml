@@ -1315,6 +1315,16 @@
   <string name="workspace_detail_enable_gitignore_desc">Automatically skip files and directories ignored in .gitignore during import</string>
   <string name="workspace_detail_custom_ignore">Custom exclusion pattern</string>
   <string name="workspace_detail_custom_ignore_hint">Separate items with commas or line breaks, e.g., node_modules, .git, build</string>
+  <string name="workspace_detail_import_conflict_mode">Overwrite same-name items on upload</string>
+  <string name="workspace_detail_import_conflict_mode_desc">When enabled, uploading always overwrites same-name files/directories (also deleting content absent from the source, respecting exclusion rules). When disabled, a copy is created instead (e.g. name (1)).</string>
+  <string name="workspace_detail_import_preview_title">Import Preview</string>
+  <string name="workspace_detail_import_confirm">Import</string>
+  <string name="workspace_detail_import_no_changes">No changes to import</string>
+  <string name="workspace_detail_import_failed_title">Import Failed</string>
+  <string name="workspace_detail_import_type_conflict_title">Replace Existing Item</string>
+  <string name="workspace_detail_import_type_conflict_file">A directory named \"%1$s\" already exists here. Delete the entire directory and import the file?</string>
+  <string name="workspace_detail_import_type_conflict_dir">A file named \"%1$s\" already exists here. Delete it and import the directory?</string>
+  <string name="workspace_detail_import_replace">Replace</string>
   <string name="workspace_detail_sync_to_source">Sync back to original directory</string>
   <string name="workspace_detail_sync_preview_title">Sync Preview</string>
   <string name="workspace_detail_sync_stats">New %1$d · Modified %2$d · Deleted %3$d</string>

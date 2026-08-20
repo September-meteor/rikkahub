@@ -23,6 +23,9 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import kotlin.uuid.Uuid
 
 class WorkspaceRepository(
@@ -205,10 +208,42 @@ class WorkspaceRepository(
         destinationPath: String,
         fileName: String,
         inputStream: InputStream,
+        overwrite: Boolean = false,
     ): WorkspaceFileEntry = withContext(Dispatchers.IO) {
         val workspace = dao.getById(id) ?: error("Workspace not found: $id")
         manager.ensureWorkspace(workspace.root)
-        manager.importFile(workspace.root, destinationPath, area, fileName, inputStream)
+        manager.importFile(workspace.root, destinationPath, area, fileName, inputStream, overwrite)
+    }
+
+    /** 确保目录存在（用于导入空目录） */
+    suspend fun createDir(
+        id: String,
+        area: WorkspaceStorageArea,
+        path: String,
+    ): WorkspaceFileEntry = withContext(Dispatchers.IO) {
+        val workspace = dao.getById(id) ?: error("Workspace not found: $id")
+        manager.ensureWorkspace(workspace.root)
+        manager.createDir(workspace.root, path, area)
+    }
+
+    /** 目标路径是否存在（上传冲突检测） */
+    suspend fun fileExists(
+        id: String,
+        area: WorkspaceStorageArea,
+        path: String,
+    ): Boolean = withContext(Dispatchers.IO) {
+        val workspace = dao.getById(id) ?: return@withContext false
+        manager.fileExists(workspace.root, path, area)
+    }
+
+    /** 目标路径是否为目录（上传类型冲突检测） */
+    suspend fun isDirectory(
+        id: String,
+        area: WorkspaceStorageArea,
+        path: String,
+    ): Boolean = withContext(Dispatchers.IO) {
+        val workspace = dao.getById(id) ?: return@withContext false
+        manager.isDirectory(workspace.root, path, area)
     }
 
     suspend fun fileSize(
@@ -345,6 +380,16 @@ class WorkspaceRepository(
         dao.getById(id)?.let { manager.filesDir(it.root) }
     }
 
+    /** 工作区指定区域根目录（FILES / LINUX），用于导入覆盖的目标定位 */
+    suspend fun workspaceAreaDir(id: String, area: WorkspaceStorageArea): File? = withContext(Dispatchers.IO) {
+        dao.getById(id)?.let { ws ->
+            when (area) {
+                WorkspaceStorageArea.FILES -> manager.filesDir(ws.root)
+                WorkspaceStorageArea.LINUX -> manager.linuxDir(ws.root)
+            }
+        }
+    }
+
     /** 读取上次同步快照；不存在或解析失败返回 null */
     suspend fun readSyncSnapshot(id: String): SyncSnapshot? = withContext(Dispatchers.IO) {
         val workspace = dao.getById(id) ?: return@withContext null
@@ -361,7 +406,22 @@ class WorkspaceRepository(
         runCatching {
             val file = syncSnapshotFile(workspace.root)
             file.parentFile?.mkdirs()
-            file.writeText(JsonInstant.encodeToString(snapshot))
+            // 真正原子写入：临时文件 + Files.move(ATOMIC_MOVE, REPLACE_EXISTING)
+            // 底层是 rename(2)，不存在「旧文件已删、新文件未落」的中间态；
+            // 进程在写入中途被杀也不会留下截断/缺失的快照（快照损坏 → 同步入口消失）
+            val tmp = File(file.parentFile, "sync_snapshot.json.tmp")
+            tmp.writeText(JsonInstant.encodeToString(snapshot))
+            try {
+                Files.move(
+                    tmp.toPath(),
+                    file.toPath(),
+                    StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING,
+                )
+            } catch (e: AtomicMoveNotSupportedException) {
+                // 极少数文件系统不支持原子移动：退化为普通 move（同目录内基本等价）
+                Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            }
         }.isSuccess
     }
 

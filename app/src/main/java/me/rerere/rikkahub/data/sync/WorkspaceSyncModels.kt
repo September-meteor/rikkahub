@@ -76,3 +76,18 @@ enum class SyncCheckMode(val value: String) {
             entries.firstOrNull { it.value == value } ?: ACCURATE
     }
 }
+
+/** 导入遇到同名文件/目录时的默认行为（存于 workspaces.import_conflict_mode） */
+enum class ImportConflictMode(val value: String) {
+    /** 创建副本（name (1).ext / name (1) 递增），不改动已有内容 */
+    RENAME("rename"),
+
+    /** 覆盖（完整 rsync --delete 语义：删除目标中源没有的内容，排除规则无视） */
+    OVERWRITE("overwrite");
+
+    companion object {
+        /** 未知值（含 null / 旧数据）默认创建副本，保证不破坏已有文件 */
+        fun from(value: String?): ImportConflictMode =
+            entries.firstOrNull { it.value == value } ?: RENAME
+    }
+}

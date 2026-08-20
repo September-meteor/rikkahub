@@ -1317,6 +1317,16 @@
   <string name="workspace_detail_enable_gitignore_desc">Автоматически пропускать файлы и папки, игнорируемые в .gitignore, при импорте</string>
   <string name="workspace_detail_custom_ignore">Пользовательский шаблон исключения</string>
   <string name="workspace_detail_custom_ignore_hint">Разделяйте элементы запятыми или переносами строк, например: node_modules, .git, build</string>
+  <string name="workspace_detail_import_conflict_mode">Перезаписывать одноимённые элементы при загрузке</string>
+  <string name="workspace_detail_import_conflict_mode_desc">При включении загрузка всегда перезаписывает одноимённые файлы/папки (с учётом правил исключения, также удаляя содержимое, отсутствующее в источнике). При выключении создаётся копия (например, name (1))</string>
+  <string name="workspace_detail_import_preview_title">Предпросмотр импорта</string>
+  <string name="workspace_detail_import_confirm">Импорт</string>
+  <string name="workspace_detail_import_no_changes">Нет изменений для импорта</string>
+  <string name="workspace_detail_import_failed_title">Сбой импорта</string>
+  <string name="workspace_detail_import_type_conflict_title">Заменить существующий элемент</string>
+  <string name="workspace_detail_import_type_conflict_file">Здесь уже есть папка с именем «%1$s». Удалить всю папку и импортировать файл?</string>
+  <string name="workspace_detail_import_type_conflict_dir">Здесь уже есть файл с именем «%1$s». Удалить его и импортировать папку?</string>
+  <string name="workspace_detail_import_replace">Заменить</string>
   <string name="workspace_detail_sync_to_source">Синхронизировать с исходным каталогом</string>
   <string name="workspace_detail_sync_preview_title">Предпросмотр синхронизации</string>
   <string name="workspace_detail_sync_stats">Новых: %1$d · Изменено: %2$d · Удалено: %3$d</string>

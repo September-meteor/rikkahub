@@ -185,7 +185,7 @@ private fun SyncExecutingContent(progress: SyncProgress?) {
 
 /** 结果确认内容：顶部统计 + 按类型分组的三色列表；空预览显示「没有需要同步的变更」 */
 @Composable
-private fun SyncPreviewContent(preview: List<SyncPreviewItem>) {
+internal fun SyncPreviewContent(preview: List<SyncPreviewItem>) {
     val createCount = preview.count {
         it.type == SyncPreviewType.CREATE || it.type == SyncPreviewType.CREATE_DIR
     }
@@ -468,4 +468,45 @@ private fun ellipsizeLine(
         }
     }
     return body.take(lo) + ellipsis + if (trailingSlash) "/" else ""
+}
+
+/**
+ * 覆盖导入预览弹窗：展示即将执行的新增/更新/删除，等待用户确认。
+ * 复用同步预览的列表渲染（[SyncPreviewContent]），保持弹窗风格一致；
+ * 空差异（内容完全一致）时显示「没有需要导入的变更」，确认按钮置灰。
+ */
+@Composable
+fun WorkspaceImportPreviewDialog(
+    preview: List<SyncPreviewItem>,
+    onConfirm: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text(stringResource(R.string.workspace_detail_import_preview_title)) },
+        text = {
+            if (preview.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.workspace_detail_import_no_changes),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                SyncPreviewContent(preview)
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onConfirm,
+                enabled = preview.isNotEmpty(),
+            ) {
+                Text(stringResource(R.string.workspace_detail_import_confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onCancel) {
+                Text(stringResource(R.string.common_cancel))
+            }
+        },
+    )
 }

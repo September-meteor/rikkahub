@@ -368,6 +368,10 @@ object WorkspaceSyncEngine {
      *
      * 空目录（[internalDirs] / [externalDirs]，整棵子树无可见文件）：
      * A 有 C 无 → CREATE_DIR；C 有 A 无 → DELETE_DIR。
+     *
+     * @param invert true = 导入覆盖方向（源为 C 侧 external、目标为 A 侧 internal）：
+     * CREATE/DELETE 语义反转（A 无 C 有 → 写入 A；C 无 A 有 → 删除 A；空目录同理）。
+     * 内容比对（ACCURATE）不受影响：A 侧 hash 由调用方预计算（withHash=true），C 侧从 rootDoc 现算。
      */
     suspend fun computePreview(
         context: Context,
@@ -379,6 +383,7 @@ object WorkspaceSyncEngine {
         mode: SyncCheckMode = SyncCheckMode.ACCURATE,
         docCache: DocumentCache? = null,
         onHashProgress: suspend (done: Int, total: Int) -> Unit = { _, _ -> },
+        invert: Boolean = false,
     ): List<SyncPreviewItem> = withContext(Dispatchers.IO) {
         val items = mutableListOf<SyncPreviewItem>()
         // 存在性 + 尺寸差异（两种模式都走这一遍）
@@ -388,10 +393,14 @@ object WorkspaceSyncEngine {
             val a = internal[path]
             val c = external[path]
             when {
-                a == null -> items += SyncPreviewItem(type = SyncPreviewType.DELETE, path = path)
+                a == null -> items += SyncPreviewItem(
+                    type = if (invert) SyncPreviewType.CREATE else SyncPreviewType.DELETE,
+                    path = path,
+                    sizeHint = c?.size?.fileSizeToString() ?: "",
+                )
 
                 c == null -> items += SyncPreviewItem(
-                    type = SyncPreviewType.CREATE,
+                    type = if (invert) SyncPreviewType.DELETE else SyncPreviewType.CREATE,
                     path = path,
                     sizeHint = a.size.fileSizeToString(),
                 )
@@ -425,12 +434,18 @@ object WorkspaceSyncEngine {
                 }
             }
         }
-        // 空目录：A 有 C 无 → 创建；C 有 A 无 → 删除
+        // 空目录：A 有 C 无 → 创建；C 有 A 无 → 删除（导入覆盖方向反转）
         for (dir in internalDirs - externalDirs) {
-            items += SyncPreviewItem(type = SyncPreviewType.CREATE_DIR, path = dir)
+            items += SyncPreviewItem(
+                type = if (invert) SyncPreviewType.DELETE_DIR else SyncPreviewType.CREATE_DIR,
+                path = dir,
+            )
         }
         for (dir in externalDirs - internalDirs) {
-            items += SyncPreviewItem(type = SyncPreviewType.DELETE_DIR, path = dir)
+            items += SyncPreviewItem(
+                type = if (invert) SyncPreviewType.CREATE_DIR else SyncPreviewType.DELETE_DIR,
+                path = dir,
+            )
         }
         items.sortedWith(compareBy({ it.type.ordinal }, { it.path }))
     }
@@ -528,6 +543,93 @@ object WorkspaceSyncEngine {
             currentCoroutineContext().ensureActive()
             ensureDocumentDir(rootDoc, item.path.split('/'), docCache)
                 ?: error("无法创建目录: ${item.path}")
+            tick()
+        }
+    }
+
+    /**
+     * 把「导入覆盖」预览应用到本地目录（方向与 [execute] 相反：从 SAF 源读取、写入本地）。
+     *
+     * 适用于目录覆盖导入（源目录为 SAF tree，目标为工作区本地目录）：
+     * - DELETE：删除本地多余文件（目标有、源没有）
+     * - DELETE_DIR：自下而上清理本地空目录
+     * - CREATE / MODIFY：从源 SAF 读取内容写入本地
+     * - CREATE_DIR：创建本地目录
+     *
+     * 排除规则在扫描阶段已剪枝，此处不重复判断；被忽略内容所在目录因仍有文件而不为空，
+     * 天然不会被 DELETE_DIR 清理。
+     */
+    suspend fun executeImportToLocal(
+        context: Context,
+        rootDoc: DocumentFile,
+        preview: List<SyncPreviewItem>,
+        localRoot: File,
+        docCache: DocumentCache? = null,
+        onProgress: (done: Int, total: Int) -> Unit,
+    ) = withContext(Dispatchers.IO) {
+        val resolver = context.contentResolver
+        val total = preview.size
+        var done = 0
+        fun tick() {
+            done++
+            onProgress(done, total)
+        }
+
+        // ---- 阶段 1：DELETE 本地文件（先删文件，再自下而上清理空目录）----
+        val fileDeletes = preview.filter { it.type == SyncPreviewType.DELETE }
+        val dirDeletes = preview.filter { it.type == SyncPreviewType.DELETE_DIR }
+        val touchedDirs = mutableSetOf<String>()
+        for (item in fileDeletes.sortedByDescending { it.path.count { c -> c == '/' } }) {
+            currentCoroutineContext().ensureActive()
+            val file = File(localRoot, item.path)
+            if (file.isFile && file.delete()) {
+                touchedDirs += item.path.substringBeforeLast('/', "")
+            }
+            tick()
+        }
+        // 清理空目录（自下而上，两遍兜底：目录可能因 SAF/list 延迟或嵌套删不干净）
+        val dirCandidates = (touchedDirs + dirDeletes.map { it.path })
+            .filter { it.isNotBlank() }
+            .sortedByDescending { it.count { c -> c == '/' } }
+        for (pass in 0 until 2) {
+            var changed = false
+            for (dirPath in dirCandidates) {
+                currentCoroutineContext().ensureActive()
+                val dir = File(localRoot, dirPath)
+                if (!dir.isDirectory) continue
+                val empty = dir.listFiles()?.isEmpty() != false
+                if (empty && dir.delete()) {
+                    changed = true
+                }
+            }
+            if (!changed) break
+        }
+        for (item in dirDeletes) {
+            tick()
+        }
+
+        // ---- 阶段 2：CREATE / MODIFY（从源 SAF 读取内容写入本地）----
+        val writes = preview
+            .filter { it.type == SyncPreviewType.CREATE || it.type == SyncPreviewType.MODIFY }
+            .sortedBy { it.path }
+        for (item in writes) {
+            currentCoroutineContext().ensureActive()
+            val doc = docCache?.files?.get(item.path) ?: resolveDocument(rootDoc, item.path)
+            require(doc != null && doc.isFile) { "源文件不存在: ${item.path}" }
+            val target = File(localRoot, item.path)
+            target.parentFile?.mkdirs()
+            val input = resolver.openInputStream(doc.uri)
+                ?: error("无法读取源文件: ${item.path}")
+            input.use { stream ->
+                target.outputStream().use { stream.copyTo(it) }
+            }
+            tick()
+        }
+
+        // ---- 阶段 3：CREATE_DIR（mkdirs 自动补齐父级目录链）----
+        for (item in preview.filter { it.type == SyncPreviewType.CREATE_DIR }) {
+            currentCoroutineContext().ensureActive()
+            File(localRoot, item.path).mkdirs()
             tick()
         }
     }

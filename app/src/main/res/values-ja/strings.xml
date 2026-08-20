@@ -1317,6 +1317,16 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="workspace_detail_enable_gitignore_desc">インポート時に .gitignore で無視されているファイルやディレクトリを自動的にスキップ</string>
   <string name="workspace_detail_custom_ignore">カスタム除外パターン</string>
   <string name="workspace_detail_custom_ignore_hint">カンマまたは改行で項目を区切ります。例: node_modules, .git, build</string>
+  <string name="workspace_detail_import_conflict_mode">アップロードで同名の項目を上書き</string>
+  <string name="workspace_detail_import_conflict_mode_desc">有効にすると、アップロード時に同名のファイル/ディレクトリを常に上書きします（除外ルールを尊重し、ソースに存在しない内容も削除）。無効の場合はコピーを作成します（例: name (1)）</string>
+  <string name="workspace_detail_import_preview_title">インポートのプレビュー</string>
+  <string name="workspace_detail_import_confirm">インポート</string>
+  <string name="workspace_detail_import_no_changes">インポートする変更はありません</string>
+  <string name="workspace_detail_import_failed_title">インポートに失敗しました</string>
+  <string name="workspace_detail_import_type_conflict_title">既存の項目を置き換え</string>
+  <string name="workspace_detail_import_type_conflict_file">ここには同名のディレクトリ「%1$s」が既に存在します。ディレクトリを削除してファイルをインポートしますか？</string>
+  <string name="workspace_detail_import_type_conflict_dir">ここには同名のファイル「%1$s」が既に存在します。ファイルを削除してディレクトリをインポートしますか？</string>
+  <string name="workspace_detail_import_replace">置き換え</string>
   <string name="workspace_detail_sync_to_source">元のディレクトリに同期</string>
   <string name="workspace_detail_sync_preview_title">同期プレビュー</string>
   <string name="workspace_detail_sync_stats">新規 %1$d · 変更 %2$d · 削除 %3$d</string>

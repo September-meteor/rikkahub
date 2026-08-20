@@ -73,6 +73,7 @@ import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.ai.tools.resolveWorkspaceToolApproval
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.sync.SyncCheckMode
+import me.rerere.rikkahub.data.sync.ImportConflictMode
 import androidx.compose.ui.res.stringResource
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -137,8 +138,7 @@ fun WorkspaceDetailPage(id: String) {
                 if (nameIndex >= 0) cursor.getString(nameIndex) else null
             } else null
         } ?: uri.lastPathSegment ?: "imported_file"
-        val inputStream = context.contentResolver.openInputStream(uri) ?: return@rememberLauncherForActivityResult
-        vm.importFile(inputStream, fileName)
+        vm.importFile(context, uri, fileName)
     }
     var exportTarget by remember { mutableStateOf<WorkspaceFileEntry?>(null) }
     val exportLauncher = rememberLauncherForActivityResult(
@@ -256,6 +256,7 @@ fun WorkspaceDetailPage(id: String) {
                     onEnableGitignoreChange = vm::setEnableGitignore,
                     onCustomIgnoreChange = vm::setCustomIgnorePatterns,
                     onSyncCheckModeChange = vm::setSyncCheckMode,
+                    onConflictModeChange = vm::setImportConflictMode,
                 )
 
                 1 -> WorkspaceFilesPage(
@@ -425,6 +426,59 @@ fun WorkspaceDetailPage(id: String) {
             },
         )
     }
+
+    // 覆盖导入预览：展示即将执行的新增/更新/删除，等待确认
+    state.importPreview?.let { preview ->
+        WorkspaceImportPreviewDialog(
+            preview = preview,
+            onConfirm = { vm.confirmImportPreview(context) },
+            onCancel = vm::cancelImportPreview,
+        )
+    }
+
+    // 导入类型冲突（文件 vs 目录同名）：替换/取消
+    state.importTypeConflict?.let { conflict ->
+        AlertDialog(
+            onDismissRequest = vm::cancelImportReplace,
+            title = { Text(stringResource(R.string.workspace_detail_import_type_conflict_title)) },
+            text = {
+                Text(
+                    stringResource(
+                        if (conflict.importingDirectory) {
+                            R.string.workspace_detail_import_type_conflict_dir
+                        } else {
+                            R.string.workspace_detail_import_type_conflict_file
+                        },
+                        conflict.name,
+                    )
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { vm.confirmImportReplace(context) }) {
+                    Text(stringResource(R.string.workspace_detail_import_replace))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = vm::cancelImportReplace) {
+                    Text(stringResource(R.string.common_cancel))
+                }
+            },
+        )
+    }
+
+    // 导入失败弹窗：任何导入流程异常都会弹出，不让错误被静默吞掉
+    state.importError?.let { message ->
+        AlertDialog(
+            onDismissRequest = vm::dismissImportError,
+            title = { Text(stringResource(R.string.workspace_detail_import_failed_title)) },
+            text = { Text(message) },
+            confirmButton = {
+                TextButton(onClick = vm::dismissImportError) {
+                    Text(stringResource(R.string.common_confirm))
+                }
+            },
+        )
+    }
 }
 
 @Composable
@@ -436,6 +490,7 @@ private fun WorkspaceBasicPage(
     onEnableGitignoreChange: (Boolean) -> Unit,
     onCustomIgnoreChange: (String) -> Unit,
     onSyncCheckModeChange: (SyncCheckMode) -> Unit,
+    onConflictModeChange: (ImportConflictMode) -> Unit,
 ) {
     val shellStatus = workspace?.shellStatus
     val installing = installProgress != null || shellStatus == WorkspaceShellStatus.INSTALLING.name
@@ -518,6 +573,7 @@ private fun WorkspaceBasicPage(
                 onEnableGitignoreChange = onEnableGitignoreChange,
                 onCustomIgnoreChange = onCustomIgnoreChange,
                 onSyncCheckModeChange = onSyncCheckModeChange,
+                onConflictModeChange = onConflictModeChange,
             )
         }
 
@@ -1024,6 +1080,7 @@ private fun WorkspaceImportSettingsCard(
     onEnableGitignoreChange: (Boolean) -> Unit,
     onCustomIgnoreChange: (String) -> Unit,
     onSyncCheckModeChange: (SyncCheckMode) -> Unit,
+    onConflictModeChange: (ImportConflictMode) -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -1084,6 +1141,35 @@ private fun WorkspaceImportSettingsCard(
                 enabled = workspace != null,
                 minLines = 2,
             )
+
+            // 上传冲突处理：同名文件/目录默认行为（关闭 = 创建副本，开启 = 覆盖并同步删除多余内容）
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.workspace_detail_import_conflict_mode),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Text(
+                        text = stringResource(R.string.workspace_detail_import_conflict_mode_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = ImportConflictMode.from(workspace?.importConflictMode) == ImportConflictMode.OVERWRITE,
+                    onCheckedChange = { enabled ->
+                        onConflictModeChange(if (enabled) ImportConflictMode.OVERWRITE else ImportConflictMode.RENAME)
+                    },
+                    enabled = workspace != null,
+                )
+            }
 
             // 同步检查模式：快速（仅尺寸）/ 完整（校验内容）
             val selectedMode = SyncCheckMode.from(workspace?.syncCheckMode)

@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.SystemClock
+import android.util.Log
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -13,14 +14,15 @@ import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.File
-import java.io.InputStream
 import java.io.OutputStream
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.data.sync.DocumentCache
+import me.rerere.rikkahub.data.sync.ImportConflictMode
 import me.rerere.rikkahub.data.sync.InternalScanResult
 import me.rerere.rikkahub.data.sync.SyncCheckMode
 import me.rerere.rikkahub.data.sync.SyncPreviewItem
+import me.rerere.rikkahub.data.sync.SyncPreviewType
 import me.rerere.rikkahub.data.sync.SyncSnapshot
 import me.rerere.rikkahub.data.sync.SyncStage
 import me.rerere.rikkahub.data.sync.SyncStageException
@@ -40,6 +42,7 @@ import kotlinx.coroutines.isActive
 class WorkspaceDetailVM(
     private val id: String,
     private val repository: WorkspaceRepository,
+    private val appContext: Context,
 ) : ViewModel() {
     private val _state = MutableStateFlow(WorkspaceDetailState())
     val state = _state.asStateFlow()
@@ -59,6 +62,12 @@ class WorkspaceDetailVM(
     /** 预览阶段构建并保留的排除规则 / DocumentFile 缓存，供确认执行时复用 */
     private var syncRules: WorkspaceIgnoreRules? = null
     private var syncDocCache: DocumentCache? = null
+
+    /** 覆盖导入：预览阶段构建并保留的规则 / 缓存 / 待确认上下文 */
+    private var importRules: WorkspaceIgnoreRules? = null
+    private var importDocCache: DocumentCache? = null
+    private var pendingImport: PendingImport? = null
+    private var pendingFileImport: PendingFileImport? = null
 
     init {
         loadWorkspace()
@@ -136,25 +145,92 @@ class WorkspaceDetailVM(
         }
     }
 
-    fun importFile(inputStream: InputStream, fileName: String) {
-        viewModelScope.launch {
-            runCatching {
-                repository.importFile(
-                    id = id,
-                    area = state.value.area,
-                    destinationPath = state.value.path,
+    /**
+     * 导入单个文件。
+     *
+     * 冲突处理取决于工作区 [ImportConflictMode]：
+     * - RENAME（默认）：同名时静默创建副本（name (1).ext）
+     * - OVERWRITE：目标为文件 → 弹预览（更新）确认后覆盖；目标为目录 → 类型冲突弹窗（替换/取消）
+     */
+    fun importFile(context: Context, uri: Uri, fileName: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val workspace = repository.getById(id) ?: return@launch
+            val mode = ImportConflictMode.from(workspace.importConflictMode)
+            val area = state.value.area
+            val destPath = state.value.path
+            val targetPath = if (destPath.isBlank()) fileName else "$destPath/$fileName"
+            Log.d(TAG, "importFile: mode=$mode area=$area dest=$destPath name=$fileName")
+
+            val conflictExists = repository.fileExists(id, area, targetPath)
+            if (!conflictExists || mode == ImportConflictMode.RENAME) {
+                // 无冲突 / 创建副本：直接导入（importBytes 内部处理副本命名）
+                writeSingleFile(context, uri, destPath, fileName, area, overwrite = false)
+                return@launch
+            }
+
+            // OVERWRITE 且目标已存在
+            if (repository.isDirectory(id, area, targetPath)) {
+                // 目标为目录 → 类型冲突（替换/取消）
+                pendingFileImport = PendingFileImport(
+                    uri = uri,
                     fileName = fileName,
-                    inputStream = inputStream,
+                    targetPath = targetPath,
+                    area = area,
+                    destPath = destPath,
+                    replace = true,
                 )
-            }.onSuccess {
-                refresh()
-            }.onFailure { error ->
-                _state.update { it.copy(error = error.message ?: "导入文件失败") }
+                _state.update {
+                    it.copy(importTypeConflict = ImportTypeConflictInfo(name = fileName, importingDirectory = false))
+                }
+            } else {
+                // 目标为文件 → 预览「更新」后覆盖
+                pendingFileImport = PendingFileImport(
+                    uri = uri,
+                    fileName = fileName,
+                    targetPath = targetPath,
+                    area = area,
+                    destPath = destPath,
+                    replace = false,
+                )
+                _state.update {
+                    it.copy(importPreview = listOf(SyncPreviewItem(type = SyncPreviewType.MODIFY, path = targetPath)))
+                }
             }
         }
     }
 
-    // 导入整个目录（方案3：流式总数 + 增强.gitignore解析）
+    private suspend fun writeSingleFile(
+        context: Context,
+        uri: Uri,
+        destPath: String,
+        fileName: String,
+        area: WorkspaceStorageArea,
+        overwrite: Boolean,
+    ) {
+        runCatching {
+            val inputStream = context.contentResolver.openInputStream(uri)
+                ?: error("无法读取所选文件")
+            repository.importFile(
+                id = id,
+                area = area,
+                destinationPath = destPath,
+                fileName = fileName,
+                inputStream = inputStream,
+                overwrite = overwrite,
+            )
+        }.onSuccess {
+            refresh()
+        }.onFailure { error ->
+            _state.update { it.copy(error = error.message ?: "导入文件失败", importError = error.message ?: "导入文件失败") }
+            Log.e(TAG, "导入文件失败: $error", error)
+        }
+    }
+
+    // 导入整个目录（流式总数 + 增强.gitignore解析）
+    // 冲突处理取决于工作区 ImportConflictMode：
+    // - RENAME（默认）：目标已存在同名目录时创建副本（name (1)），不注册同步来源/快照
+    // - OVERWRITE：目标为目录 → 扫描差异，含破坏性操作（更新/删除）时弹预览确认后执行；
+    //   目标为文件 → 类型冲突弹窗（替换/取消）
     fun importDirectory(
         context: Context,
         treeUri: Uri,
@@ -162,145 +238,510 @@ class WorkspaceDetailVM(
         customIgnorePatterns: String,
     ) {
         viewModelScope.launch(Dispatchers.IO) {
+            val workspace = repository.getById(id) ?: return@launch
+            val mode = ImportConflictMode.from(workspace.importConflictMode)
+            val area = state.value.area
+            val destPath = state.value.path
+
             // -1 表示正在快速扫描阶段，UI 会显示不确定进度
-            _state.update { it.copy(loading = true, error = null, importProgress = 0 to -1) }
-
-            // 2.1 拿到 treeUri 后立即占住持久化权限（READ + WRITE），为「导回原处」做准备
-            val persisted = runCatching {
-                context.contentResolver.takePersistableUriPermission(
-                    treeUri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
-                )
-                true
-            }.getOrDefault(false)
-
-            // 2.2 记录原始目录 URI（权限失效时 UI 据此引导重新选择）
-            repository.getById(id)?.let { ws ->
-                repository.updateWorkspace(
-                    ws.copy(
-                        sourceTreeUri = treeUri.toString(),
-                        sourceUriPersisted = persisted,
-                        updatedAt = System.currentTimeMillis(),
-                    )
-                )
-            }
-
-            // 排除规则：与「导回原处」共用同一实现，保证导出时不误删被排除内容
-            val rules = WorkspaceIgnoreRules(enableGitignore, customIgnorePatterns)
+            _state.update { it.copy(loading = true, error = null, importError = null, importProgress = 0 to -1) }
+            Log.d(TAG, "importDirectory: mode=$mode area=$area dest=$destPath uri=$treeUri")
 
             runCatching {
                 val rootDoc = DocumentFile.fromTreeUri(context, treeUri)
                     ?: error("无法访问所选目录")
                 val rootName = rootDoc.name ?: "imported"
+                val rules = WorkspaceIgnoreRules(enableGitignore, customIgnorePatterns)
 
-                // 阶段1：快速浅扫描，只统计文件数（不加载 .gitignore，非常快）
-                val subtreeCounts = mutableMapOf<Uri, Int>()
-                fun quickScan(doc: DocumentFile): Int {
-                    val count = if (!doc.isDirectory) {
-                        1
-                    } else {
-                        doc.listFiles()?.sumOf { quickScan(it) } ?: 0
-                    }
-                    subtreeCounts[doc.uri] = count
-                    return count
-                }
-                val approxTotal = rootDoc.listFiles()?.sumOf { quickScan(it) } ?: 0
-                var currentTotal = approxTotal
-                var processed = 0
+                val targetPath = if (destPath.isBlank()) rootName else "$destPath/$rootName"
+                val conflictExists = repository.fileExists(id, area, targetPath)
 
-                // 阶段2：边加载 .gitignore 边导入，动态修正总数。
-                // 排除规则的 key 统一采用「相对导入根目录」的路径（根为 ""，子目录为 "src"），
-                // 与「导回原处」的内部/外部扫描完全一致。
-                rules.loadGitignore(rootDoc, "", context.contentResolver)
-
-                suspend fun importDoc(
-                    doc: DocumentFile,
-                    parentKey: String,
-                ) {
-                    val name = doc.name ?: return
-                    val isDir = doc.isDirectory
-
-                    if (rules.shouldIgnore(name, parentKey, isDir)) {
-                        // 被忽略时从总数中扣除该子树文件数，避免进度永远到不了 100%
-                        val skippedCount = subtreeCounts[doc.uri] ?: if (isDir) quickScan(doc) else 1
-                        currentTotal -= skippedCount
-                        if (currentTotal < processed) currentTotal = processed
-                        _state.update { it.copy(importProgress = processed to currentTotal) }
-                        return
+                when {
+                    // 无冲突：无论哪种模式都按现有流程导入（注册同步来源 + 快照）
+                    !conflictExists -> {
+                        registerImportSource(context, treeUri)
+                        importTree(context, rootDoc, rootName, destPath, area, rules, registerSnapshot = true)
                     }
 
-                    if (isDir) {
-                        val nextKey = if (parentKey.isEmpty()) name else "$parentKey/$name"
-                        rules.loadGitignore(doc, nextKey, context.contentResolver)
-                        doc.listFiles()?.forEach { child ->
-                            importDoc(child, nextKey)
-                        }
-                    } else {
-                        context.contentResolver.openInputStream(doc.uri)?.use { stream ->
-                            val fileName = doc.name ?: "unnamed"
-                            // 内部布局保留根目录名（files/<rootName>/<rel>），与「导回原处」的 syncRoot 约定一致
-                            val relativeDest = if (parentKey.isEmpty()) rootName else "$rootName/$parentKey"
-                            val destPath = when {
-                                state.value.path.isEmpty() -> relativeDest
-                                else -> "${state.value.path}/$relativeDest"
-                            }
-                            repository.importFile(
-                                id = id,
-                                area = state.value.area,
-                                destinationPath = destPath,
-                                fileName = fileName,
-                                inputStream = stream,
+                    // 同名目录已存在 + 副本模式：创建副本，不注册同步来源/快照
+                    mode == ImportConflictMode.RENAME -> {
+                        val copyName = resolveCopyDirName(area, destPath, rootName)
+                        importTree(context, rootDoc, copyName, destPath, area, rules, registerSnapshot = false)
+                    }
+
+                    // 覆盖模式 + 目标为目录：扫描差异后一律弹预览（空差异显示「没有需要导入的变更」），
+                    // 确认后执行写入；确认按钮在空差异时置灰
+                    repository.isDirectory(id, area, targetPath) -> {
+                        val docCache = DocumentCache()
+                        val preview = computeImportDiff(context, rootDoc, rootName, destPath, area, rules, docCache)
+                        Log.d(TAG, "importDirectory overwrite: root=$rootName preview=${preview.size} items=${preview.map { it.type.name + ":" + it.path }}")
+                        importRules = rules
+                        importDocCache = docCache
+                        pendingImport = PendingImport(
+                            treeUri = treeUri,
+                            rootName = rootName,
+                            destPath = destPath,
+                            area = area,
+                            preview = preview,
+                            replace = false,
+                        )
+                        registerImportSource(context, treeUri)
+                        _state.update { it.copy(loading = false, importProgress = null, importPreview = preview) }
+                    }
+
+                    // 覆盖模式 + 目标为文件：类型冲突 → 弹窗
+                    else -> {
+                        importRules = rules
+                        pendingImport = PendingImport(
+                            treeUri = treeUri,
+                            rootName = rootName,
+                            destPath = destPath,
+                            area = area,
+                            preview = emptyList(),
+                            replace = true,
+                        )
+                        registerImportSource(context, treeUri)
+                        _state.update {
+                            it.copy(
+                                loading = false,
+                                importProgress = null,
+                                importTypeConflict = ImportTypeConflictInfo(name = rootName, importingDirectory = true),
                             )
                         }
-                        processed++
-                        if (currentTotal < processed) currentTotal = processed
-                        _state.update { it.copy(importProgress = processed to currentTotal) }
                     }
                 }
-
-                rootDoc.listFiles()?.forEach { child ->
-                    importDoc(child, "")
-                }
-                // 强制对齐到 100%
-                if (currentTotal > 0) {
-                    _state.update { it.copy(importProgress = currentTotal to currentTotal) }
-                }
-
-                // 2.3 导入完成后生成初始快照（相对导入根目录的路径 → 大小/hash + 目录指纹）。
-                // 直接复用本次导入的 rules（其 .gitignore key 约定与 scanInternal 完全一致），
-                // 保证被排除内容不会进入快照。
-                val filesDir = repository.workspaceFilesDir(id)
-                if (filesDir != null) {
-                    val internal = WorkspaceSyncEngine.scanInternal(filesDir, rootName, rules)
-                    repository.writeSyncSnapshot(
-                        id,
-                        SyncSnapshot(
-                            syncRoot = rootName,
-                            createdAt = System.currentTimeMillis(),
-                            files = internal.files,
-                            directories = internal.directories,
-                        ),
-                    )
-                }
-            }.onSuccess {
-                _state.update { it.copy(loading = false, importProgress = null) }
-                loadWorkspace()
-                refresh()
             }.onFailure { error ->
                 _state.update {
                     it.copy(
                         loading = false,
                         importProgress = null,
                         error = error.message ?: "导入目录失败",
+                        importError = error.message ?: "导入目录失败",
                     )
                 }
+                Log.e(TAG, "导入目录失败: $error", error)
             }
         }
     }
 
+    /** 确认覆盖导入（单文件覆盖 / 目录覆盖），真正执行写入 */
+    fun confirmImportPreview(context: Context) {
+        val filePending = pendingFileImport
+        if (filePending != null) {
+            pendingFileImport = null
+            _state.update { it.copy(importPreview = null) }
+            viewModelScope.launch(Dispatchers.IO) {
+                runCatching {
+                    val stream = context.contentResolver.openInputStream(filePending.uri)
+                        ?: error("无法读取所选文件")
+                    repository.importFile(
+                        id = id,
+                        area = filePending.area,
+                        destinationPath = filePending.destPath,
+                        fileName = filePending.fileName,
+                        inputStream = stream,
+                        overwrite = true,
+                    )
+                }.onSuccess {
+                    refresh()
+                }.onFailure { error ->
+                    _state.update { it.copy(error = error.message ?: "导入文件失败", importError = error.message ?: "导入文件失败") }
+            Log.e(TAG, "导入文件失败: $error", error)
+                }
+            }
+            return
+        }
+        val pending = pendingImport ?: return
+        pendingImport = null
+        _state.update { it.copy(importPreview = null) }
+        // 空差异（内容完全一致）：无需执行，直接关闭
+        if (pending.preview.isEmpty()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val rootDoc = DocumentFile.fromTreeUri(context, pending.treeUri)
+                    ?: error("无法访问所选目录")
+                val rules = importRules ?: WorkspaceIgnoreRules(
+                    repository.getById(id)?.enableGitignore ?: true,
+                    repository.getById(id)?.customIgnorePatterns ?: "",
+                )
+                val docCache = importDocCache ?: DocumentCache()
+                executeImportOverwrite(
+                    context,
+                    rootDoc,
+                    pending.rootName,
+                    pending.destPath,
+                    pending.area,
+                    rules,
+                    docCache,
+                    pending.preview,
+                )
+            }.onFailure { error ->
+                _state.update {
+                    it.copy(
+                        loading = false,
+                        importProgress = null,
+                        error = error.message ?: "导入目录失败",
+                        importError = error.message ?: "导入目录失败",
+                    )
+                }
+                Log.e(TAG, "导入目录失败: $error", error)
+            }
+        }
+    }
+
+    /** 取消覆盖导入预览 */
+    fun cancelImportPreview() {
+        pendingFileImport = null
+        pendingImport = null
+        _state.update { it.copy(importPreview = null) }
+    }
+
+    /** 确认类型冲突替换：删除旧类型后导入 */
+    fun confirmImportReplace(context: Context) {
+        val filePending = pendingFileImport
+        if (filePending != null) {
+            pendingFileImport = null
+            _state.update { it.copy(importTypeConflict = null) }
+            viewModelScope.launch(Dispatchers.IO) {
+                runCatching {
+                    repository.deleteFile(id, filePending.area, filePending.targetPath, recursive = true)
+                    val stream = context.contentResolver.openInputStream(filePending.uri)
+                        ?: error("无法读取所选文件")
+                    repository.importFile(
+                        id = id,
+                        area = filePending.area,
+                        destinationPath = filePending.destPath,
+                        fileName = filePending.fileName,
+                        inputStream = stream,
+                        overwrite = true,
+                    )
+                }.onSuccess {
+                    refresh()
+                }.onFailure { error ->
+                    _state.update { it.copy(error = error.message ?: "导入文件失败", importError = error.message ?: "导入文件失败") }
+            Log.e(TAG, "导入文件失败: $error", error)
+                }
+            }
+            return
+        }
+        val pending = pendingImport ?: return
+        pendingImport = null
+        _state.update { it.copy(importTypeConflict = null) }
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                // 删除同名文件后按全新导入处理
+                val targetPath = if (pending.destPath.isBlank()) {
+                    pending.rootName
+                } else {
+                    "${pending.destPath}/${pending.rootName}"
+                }
+                repository.deleteFile(id, pending.area, targetPath, recursive = false)
+                val rootDoc = DocumentFile.fromTreeUri(context, pending.treeUri)
+                    ?: error("无法访问所选目录")
+                val rules = importRules ?: WorkspaceIgnoreRules(true, "")
+                importTree(context, rootDoc, pending.rootName, pending.destPath, pending.area, rules, registerSnapshot = true)
+            }.onFailure { error ->
+                _state.update {
+                    it.copy(
+                        loading = false,
+                        importProgress = null,
+                        error = error.message ?: "导入目录失败",
+                        importError = error.message ?: "导入目录失败",
+                    )
+                }
+                Log.e(TAG, "导入目录失败: $error", error)
+            }
+        }
+    }
+
+    /** 取消类型冲突替换 */
+    fun cancelImportReplace() {
+        pendingFileImport = null
+        pendingImport = null
+        _state.update { it.copy(importTypeConflict = null) }
+    }
+
+    /** 关闭导入失败弹窗 */
+    fun dismissImportError() {
+        _state.update { it.copy(importError = null) }
+    }
+
+    // ---- 导入辅助 ----
+
+    /** 占住 SAF 持久化权限并记录原始目录 URI（「导回原处」依赖）；副本导入不调用 */
+    private suspend fun registerImportSource(context: Context, treeUri: Uri) {
+        val persisted = runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                treeUri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+            )
+            true
+        }.getOrDefault(false)
+        repository.getById(id)?.let { ws ->
+            repository.updateWorkspace(
+                ws.copy(
+                    sourceTreeUri = treeUri.toString(),
+                    sourceUriPersisted = persisted,
+                    updatedAt = System.currentTimeMillis(),
+                )
+            )
+        }
+        // 立即刷新内存态，避免后续 setImportConflictMode 等用旧 workspace 回写库（回退 sourceTreeUri）
+        loadWorkspace()
+    }
+
+    /** 计算副本目录名：目标目录下不存在则用原名，否则 name (1)、name (2)… 依次递增 */
+    private suspend fun resolveCopyDirName(
+        area: WorkspaceStorageArea,
+        destPath: String,
+        rootName: String,
+    ): String {
+        suspend fun exists(name: String): Boolean {
+            val path = if (destPath.isBlank()) name else "$destPath/$name"
+            return repository.fileExists(id, area, path)
+        }
+        if (!exists(rootName)) return rootName
+        var n = 1
+        while (exists("$rootName ($n)")) n++
+        return "$rootName ($n)"
+    }
+
+    /**
+     * 流式导入目录树到本地（保留根目录名）。
+     *
+     * @param destRootName 落盘根目录名（可能为副本名 "foo (1)"）
+     * @param destPath 目标父路径（当前浏览目录）
+     * @param registerSnapshot true 时导入完成后写入同步快照（仅 FILES 区且位于根目录时有效，
+     * 避免覆盖子目录导入时的错误快照）
+     */
+    private suspend fun importTree(
+        context: Context,
+        rootDoc: DocumentFile,
+        destRootName: String,
+        destPath: String,
+        area: WorkspaceStorageArea,
+        rules: WorkspaceIgnoreRules,
+        registerSnapshot: Boolean,
+    ) {
+        _state.update { it.copy(importProgress = 0 to -1) }
+
+        // 阶段1：快速浅扫描，只统计文件数（不加载 .gitignore，非常快）
+        val subtreeCounts = mutableMapOf<Uri, Int>()
+        fun quickScan(doc: DocumentFile): Int {
+            val count = if (!doc.isDirectory) {
+                1
+            } else {
+                doc.listFiles()?.sumOf { quickScan(it) } ?: 0
+            }
+            subtreeCounts[doc.uri] = count
+            return count
+        }
+        val approxTotal = rootDoc.listFiles()?.sumOf { quickScan(it) } ?: 0
+        var currentTotal = approxTotal
+        var processed = 0
+
+        // 阶段2：边加载 .gitignore 边导入，动态修正总数。
+        // 排除规则的 key 统一采用「相对导入根目录」的路径（根为 ""，子目录为 "src"），
+        // 与「导回原处」的内部/外部扫描完全一致。
+        rules.loadGitignore(rootDoc, "", context.contentResolver)
+
+        suspend fun importDoc(
+            doc: DocumentFile,
+            parentKey: String,
+        ) {
+            val name = doc.name ?: return
+            val isDir = doc.isDirectory
+
+            if (rules.shouldIgnore(name, parentKey, isDir)) {
+                // 被忽略时从总数中扣除该子树文件数，避免进度永远到不了 100%
+                val skippedCount = subtreeCounts[doc.uri] ?: if (isDir) quickScan(doc) else 1
+                currentTotal -= skippedCount
+                if (currentTotal < processed) currentTotal = processed
+                _state.update { it.copy(importProgress = processed to currentTotal) }
+                return
+            }
+
+            if (isDir) {
+                val nextKey = if (parentKey.isEmpty()) name else "$parentKey/$name"
+                rules.loadGitignore(doc, nextKey, context.contentResolver)
+                // 空目录也要导入：目录本身非忽略时，确保目标目录树存在
+                // （否则空目录 / 仅含被忽略内容的目录不会随文件写入被创建）
+                val dirRel = "$destRootName/$nextKey"
+                val dest = if (destPath.isEmpty()) dirRel else "$destPath/$dirRel"
+                repository.createDir(id, area, dest)
+                doc.listFiles()?.forEach { child ->
+                    importDoc(child, nextKey)
+                }
+            } else {
+                context.contentResolver.openInputStream(doc.uri)?.use { stream ->
+                    val fileName = doc.name ?: "unnamed"
+                    // 内部布局保留根目录名（files/<rootName>/<rel>），与「导回原处」的 syncRoot 约定一致
+                    val relativeDest = if (parentKey.isEmpty()) destRootName else "$destRootName/$parentKey"
+                    val dest = when {
+                        destPath.isEmpty() -> relativeDest
+                        else -> "$destPath/$relativeDest"
+                    }
+                    repository.importFile(
+                        id = id,
+                        area = area,
+                        destinationPath = dest,
+                        fileName = fileName,
+                        inputStream = stream,
+                    )
+                }
+                processed++
+                if (currentTotal < processed) currentTotal = processed
+                _state.update { it.copy(importProgress = processed to currentTotal) }
+            }
+        }
+
+        rootDoc.listFiles()?.forEach { child ->
+            importDoc(child, "")
+        }
+        // 强制对齐到 100%
+        if (currentTotal > 0) {
+            _state.update { it.copy(importProgress = currentTotal to currentTotal) }
+        }
+
+        // 导入完成后生成初始快照（相对导入根目录的路径 → 大小/hash + 目录指纹）。
+        // 直接复用本次导入的 rules（其 .gitignore key 约定与 scanInternal 完全一致），
+        // 保证被排除内容不会进入快照。仅 FILES 区、位于根目录时写入（副本导入不写）。
+        if (registerSnapshot && area == WorkspaceStorageArea.FILES && destPath.isBlank()) {
+            val filesDir = repository.workspaceFilesDir(id)
+            if (filesDir != null) {
+                val internal = WorkspaceSyncEngine.scanInternal(filesDir, destRootName, rules)
+                repository.writeSyncSnapshot(
+                    id,
+                    SyncSnapshot(
+                        syncRoot = destRootName,
+                        createdAt = System.currentTimeMillis(),
+                        files = internal.files,
+                        directories = internal.directories,
+                    ),
+                )
+            }
+        }
+
+        _state.update { it.copy(loading = false, importProgress = null) }
+        loadWorkspace()
+        refresh()
+    }
+
+    /**
+     * 扫描源目录（SAF）与本地目标，生成导入覆盖的差异预览。
+     * A = 本地目标（scanInternal 预计算内容 hash），C = 源（SAF，hash 由 computePreview 现算），
+     * invert=true：CREATE/MODIFY 写入本地、DELETE 删除本地。
+     * 使用 ACCURATE 模式：内容相同的文件不会进入预览（跳过写入）。
+     *
+     * 复用同步快照（与「导回原处」的外部扫描一致）：
+     * - 预估总数 = 快照文件数（环形进度条变为确定进度）
+     * - 目录指纹短路：未变化的子树跳过下钻，重复覆盖上传明显加速
+     * 仅当快照的 syncRoot 与本次导入根同名时使用（否则指纹不匹配且预估总数无意义）。
+     */
+    private suspend fun computeImportDiff(
+        context: Context,
+        rootDoc: DocumentFile,
+        rootName: String,
+        destPath: String,
+        area: WorkspaceStorageArea,
+        rules: WorkspaceIgnoreRules,
+        docCache: DocumentCache,
+    ): List<SyncPreviewItem> {
+        val areaDir = repository.workspaceAreaDir(id, area) ?: error("工作区目录不可用")
+        val baseDir = File(areaDir, destPath)
+        val snapshot = repository.readSyncSnapshot(id)?.takeIf { it.syncRoot == rootName }
+
+        val source = WorkspaceSyncEngine.scanExternalFast(
+            context = context,
+            rootDoc = rootDoc,
+            rules = rules,
+            snapshot = snapshot,
+            docCache = docCache,
+            onProgress = { done, total, _ ->
+                _state.update { it.copy(importProgress = done to total) }
+            },
+        )
+        // 本地侧始终全量扫描并预计算内容 hash（保证「相同内容跳过」判定正确），
+        // 进度沿用外部扫描的预估总数，避免被内部扫描的未知总数打回不确定进度
+        val local = WorkspaceSyncEngine.scanInternal(
+            filesDir = baseDir,
+            syncRoot = rootName,
+            rules = rules,
+            withHash = true,
+            onProgress = { done, _ ->
+                _state.update { st ->
+                    val total = st.importProgress?.second ?: -1
+                    st.copy(importProgress = done to total)
+                }
+            },
+        )
+        return WorkspaceSyncEngine.computePreview(
+            context = context,
+            rootDoc = rootDoc,
+            internal = local.files,
+            external = source.files,
+            internalDirs = local.emptyDirs,
+            externalDirs = source.emptyDirs,
+            mode = SyncCheckMode.ACCURATE,
+            docCache = docCache,
+            onHashProgress = { done, total ->
+                _state.update { it.copy(importProgress = done to total) }
+            },
+            invert = true,
+        )
+    }
+
+    /** 执行导入覆盖：把差异应用到本地，完成后刷新快照（仅 FILES 区且位于根目录时写入） */
+    private suspend fun executeImportOverwrite(
+        context: Context,
+        rootDoc: DocumentFile,
+        rootName: String,
+        destPath: String,
+        area: WorkspaceStorageArea,
+        rules: WorkspaceIgnoreRules,
+        docCache: DocumentCache,
+        preview: List<SyncPreviewItem>,
+    ) {
+        Log.d(TAG, "executeImportOverwrite: root=$rootName area=$area dest=$destPath preview=${preview.size}")
+        if (preview.isNotEmpty()) {
+            val areaDir = repository.workspaceAreaDir(id, area) ?: error("工作区目录不可用")
+            val localRoot = File(areaDir, if (destPath.isBlank()) rootName else "$destPath/$rootName")
+            WorkspaceSyncEngine.executeImportToLocal(
+                context = context,
+                rootDoc = rootDoc,
+                preview = preview,
+                localRoot = localRoot,
+                docCache = docCache,
+                onProgress = { done, total ->
+                    _state.update { it.copy(importProgress = done to total) }
+                },
+            )
+        }
+
+        if (area == WorkspaceStorageArea.FILES && destPath.isBlank()) {
+            val filesDir = repository.workspaceFilesDir(id)
+            if (filesDir != null) {
+                val internal = WorkspaceSyncEngine.scanInternal(filesDir, rootName, rules)
+                repository.writeSyncSnapshot(
+                    id,
+                    SyncSnapshot(
+                        syncRoot = rootName,
+                        createdAt = System.currentTimeMillis(),
+                        files = internal.files,
+                        directories = internal.directories,
+                    ),
+                )
+            }
+        }
+
+        _state.update { it.copy(loading = false, importProgress = null) }
+        loadWorkspace()
+        refresh()
+    }
+
     fun setEnableGitignore(enabled: Boolean) {
         viewModelScope.launch {
-            val workspace = state.value.workspace ?: return@launch
+            val workspace = repository.getById(id) ?: return@launch
             repository.updateWorkspace(
                 workspace.copy(enableGitignore = enabled, updatedAt = System.currentTimeMillis())
             )
@@ -310,7 +751,7 @@ class WorkspaceDetailVM(
     
     fun setCustomIgnorePatterns(patterns: String) {
         viewModelScope.launch {
-            val workspace = state.value.workspace ?: return@launch
+            val workspace = repository.getById(id) ?: return@launch
             repository.updateWorkspace(
                 workspace.copy(customIgnorePatterns = patterns, updatedAt = System.currentTimeMillis())
             )
@@ -321,9 +762,20 @@ class WorkspaceDetailVM(
     /** 持久化同步检查模式（"fast" 快速 / "accurate" 完整），下次同步时读取生效 */
     fun setSyncCheckMode(mode: SyncCheckMode) {
         viewModelScope.launch {
-            val workspace = state.value.workspace ?: return@launch
+            val workspace = repository.getById(id) ?: return@launch
             repository.updateWorkspace(
                 workspace.copy(syncCheckMode = mode.value, updatedAt = System.currentTimeMillis())
+            )
+            loadWorkspace()
+        }
+    }
+
+    /** 持久化导入冲突模式（"rename" 创建副本 / "overwrite" 覆盖），下次导入时读取生效 */
+    fun setImportConflictMode(mode: ImportConflictMode) {
+        viewModelScope.launch {
+            val workspace = repository.getById(id) ?: return@launch
+            repository.updateWorkspace(
+                workspace.copy(importConflictMode = mode.value, updatedAt = System.currentTimeMillis())
             )
             loadWorkspace()
         }
@@ -621,6 +1073,8 @@ class WorkspaceDetailVM(
     companion object {
         /** done 达到该值后才开始估算 ETA（刚起步速率不可靠） */
         private const val MIN_ETA_DONE = 5
+
+        private const val TAG = "WorkspaceDetailVM"
     }
 
     /** 阶段隔离：非取消异常包装为 [SyncStageException]，供上层翻译成用户可读文案 */
@@ -710,7 +1164,7 @@ class WorkspaceDetailVM(
 
     fun setToolApproval(toolName: String, needsApproval: Boolean) {
         viewModelScope.launch {
-            val workspace = state.value.workspace ?: return@launch
+            val workspace = repository.getById(id) ?: return@launch
             repository.setToolApproval(workspace.id, toolName, needsApproval)
             loadWorkspace()
         }
@@ -792,11 +1246,19 @@ class WorkspaceDetailVM(
             _state.update { it.copy(workspace = workspace) }
             // 加载同步根目录名（用于文件卡片上「同步回原目录」入口的显隐判断）
             if (workspace != null && workspace.sourceTreeUri.isNotBlank()) {
-                val snapshot = repository.readSyncSnapshot(id)
-                _state.update { it.copy(syncRoot = snapshot?.syncRoot) }
+                val syncRoot = repository.readSyncSnapshot(id)?.syncRoot
+                    // 快照文件缺失/损坏时自愈：从持久化的来源 URI 恢复根目录名
+                    // （与「导回原处」的 syncRoot 回退一致），保证同步入口不因快照文件丢失而消失
+                    ?: recoverSyncRootFromSource(workspace.sourceTreeUri)
+                _state.update { it.copy(syncRoot = syncRoot) }
             }
         }
     }
+
+    /** 从持久化的 SAF tree URI 恢复根目录名（快照文件缺失时的兜底） */
+    private fun recoverSyncRootFromSource(treeUri: String): String? = runCatching {
+        DocumentFile.fromTreeUri(appContext, Uri.parse(treeUri))?.name
+    }.getOrNull()
 }
 
 data class WorkspaceDetailState(
@@ -807,6 +1269,12 @@ data class WorkspaceDetailState(
     val loading: Boolean = false,
     val error: String? = null,
     val importProgress: Pair<Int, Int>? = null,
+    // 导入失败弹窗（区别于 error 卡片：任何导入流程异常都会弹窗，不让错误被静默吞掉）
+    val importError: String? = null,
+    // 覆盖导入预览（非空 = 展示预览弹窗，等待确认执行）
+    val importPreview: List<SyncPreviewItem>? = null,
+    // 导入类型冲突（文件 vs 目录同名，等待选择替换/取消）
+    val importTypeConflict: ImportTypeConflictInfo? = null,
     // 「导回原处」同步状态（显式状态机）
     val syncPhase: SyncPhase = SyncPhase.IDLE,
     val syncPreview: List<SyncPreviewItem>? = null,
@@ -855,6 +1323,35 @@ enum class SyncProgressStage { SCAN_EXTERNAL, SCAN_INTERNAL, HASH, EXECUTE }
 data class SyncPreviewResult(
     val syncRoot: String,
     val preview: List<SyncPreviewItem>,
+)
+
+/** 待确认的目录导入（覆盖预览 / 类型冲突替换） */
+data class PendingImport(
+    val treeUri: Uri,
+    val rootName: String,
+    val destPath: String,
+    val area: WorkspaceStorageArea,
+    val preview: List<SyncPreviewItem>,
+    /** true = 类型冲突替换（目标为同名文件），确认后删除旧文件再导入 */
+    val replace: Boolean,
+)
+
+/** 待确认的单文件导入（覆盖预览 / 类型冲突替换） */
+data class PendingFileImport(
+    val uri: Uri,
+    val fileName: String,
+    val targetPath: String,
+    val area: WorkspaceStorageArea,
+    val destPath: String,
+    /** true = 类型冲突替换（目标为同名目录），确认后删除旧目录再写入 */
+    val replace: Boolean,
+)
+
+/** 导入类型冲突信息（用于替换/取消弹窗展示） */
+data class ImportTypeConflictInfo(
+    val name: String,
+    /** true = 导入目录遇到同名文件；false = 导入文件遇到同名目录 */
+    val importingDirectory: Boolean,
 )
 
 data class WorkspaceTerminalState(

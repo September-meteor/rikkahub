@@ -1313,6 +1313,16 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="workspace_detail_enable_gitignore_desc">导入时自动跳过 .gitignore 中忽略的文件和目录</string>
   <string name="workspace_detail_custom_ignore">自定义排除模式</string>
   <string name="workspace_detail_custom_ignore_hint">用逗号或换行分隔，如: node_modules, .git, build</string>
+  <string name="workspace_detail_import_conflict_mode">上传遇到同名文件/目录时覆盖</string>
+  <string name="workspace_detail_import_conflict_mode_desc">开启后，上传遇到同名文件或目录时总是覆盖（并删除目标中源没有的内容，遵守排除规则）；关闭时创建副本（如 name (1)）</string>
+  <string name="workspace_detail_import_preview_title">导入预览</string>
+  <string name="workspace_detail_import_confirm">确认导入</string>
+  <string name="workspace_detail_import_no_changes">没有需要导入的变更</string>
+  <string name="workspace_detail_import_failed_title">导入失败</string>
+  <string name="workspace_detail_import_type_conflict_title">替换同名项目</string>
+  <string name="workspace_detail_import_type_conflict_file">目标位置已存在同名目录 \"%1$s\"，是否删除该目录并导入文件？</string>
+  <string name="workspace_detail_import_type_conflict_dir">目标位置已存在同名文件 \"%1$s\"，是否删除该文件并导入目录？</string>
+  <string name="workspace_detail_import_replace">替换</string>
   <string name="workspace_detail_sync_to_source">同步回原目录</string>
   <string name="workspace_detail_sync_preview_title">同步预览</string>
   <string name="workspace_detail_sync_stats">新增 %1$d · 修改 %2$d · 删除 %3$d</string>

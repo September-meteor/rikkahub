@@ -46,6 +46,9 @@ data class WorkspaceEntity(
     // 「导回原处」同步检查模式（"fast" 快速仅比对尺寸 / "accurate" 完整校验内容）
     @ColumnInfo("sync_check_mode", defaultValue = "accurate")
     val syncCheckMode: String = "accurate",
+    // 导入遇到同名文件/目录时的默认行为（"rename" 创建副本 / "overwrite" 覆盖并同步删除多余内容）
+    @ColumnInfo("import_conflict_mode", defaultValue = "rename")
+    val importConflictMode: String = "rename",
 ) {
     fun toolApprovalOverrides(): Map<String, Boolean> = runCatching {
         JsonInstant.decodeFromString<Map<String, Boolean>>(toolApprovals)

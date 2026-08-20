@@ -1315,6 +1315,16 @@
   <string name="workspace_detail_enable_gitignore_desc">匯入時自動跳過 .gitignore 中忽略的檔案與目錄</string>
   <string name="workspace_detail_custom_ignore">自訂排除模式</string>
   <string name="workspace_detail_custom_ignore_hint">用逗號或換行分隔項目，例如：node_modules, .git, build</string>
+  <string name="workspace_detail_import_conflict_mode">上傳遇到同名檔案/目錄時覆寫</string>
+  <string name="workspace_detail_import_conflict_mode_desc">開啟後，上傳遇到同名檔案或目錄時一律覆寫（並刪除目標中來源沒有的內容，遵守排除規則）；關閉時建立副本（如 name (1)）</string>
+  <string name="workspace_detail_import_preview_title">匯入預覽</string>
+  <string name="workspace_detail_import_confirm">確認匯入</string>
+  <string name="workspace_detail_import_no_changes">沒有需要匯入的變更</string>
+  <string name="workspace_detail_import_failed_title">匯入失敗</string>
+  <string name="workspace_detail_import_type_conflict_title">取代同名項目</string>
+  <string name="workspace_detail_import_type_conflict_file">目標位置已存在同名目錄「%1$s」，是否刪除該目錄並匯入檔案？</string>
+  <string name="workspace_detail_import_type_conflict_dir">目標位置已存在同名檔案「%1$s」，是否刪除該檔案並匯入目錄？</string>
+  <string name="workspace_detail_import_replace">取代</string>
   <string name="workspace_detail_sync_to_source">同步回原目錄</string>
   <string name="workspace_detail_sync_preview_title">同步預覽</string>
   <string name="workspace_detail_sync_stats">新增 %1$d · 修改 %2$d · 刪除 %3$d</string>

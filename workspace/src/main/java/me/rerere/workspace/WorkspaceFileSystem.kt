@@ -53,10 +53,36 @@ class WorkspaceFileSystem(
         return file.toEntry(root)
     }
 
-    fun importBytes(root: File, path: String, inputStream: InputStream): WorkspaceFileEntry {
+    /** 确保目录存在（用于导入空目录；目录树会随文件写入隐式创建，但空目录需要显式创建） */
+    fun ensureDirectory(root: File, path: String): WorkspaceFileEntry {
+        val dir = resolvePath(root, path)
+        require(dir.isDirectory || dir.mkdirs()) { "Failed to create directory: $path" }
+        return dir.toEntry(root)
+    }
+
+    /**
+     * 导入文件内容。
+     *
+     * @param overwrite 目标已存在时是否直接覆盖；false 时对同名文件生成副本（name (1).ext 递增）。
+     * 覆盖模式下目标必须为普通文件（目录冲突由上层解决）。
+     */
+    fun importBytes(
+        root: File,
+        path: String,
+        inputStream: InputStream,
+        overwrite: Boolean = false,
+    ): WorkspaceFileEntry {
         val file = resolvePath(root, path)
         file.parentFile?.mkdirs()
-        val target = if (!file.exists()) file else resolveConflict(file)
+        val target = when {
+            overwrite -> {
+                require(!file.exists() || file.isFile) { "Target is not a file: $path" }
+                file
+            }
+
+            !file.exists() -> file
+            else -> resolveConflict(file)
+        }
         inputStream.use { input -> target.outputStream().use { input.copyTo(it) } }
         return target.toEntry(root)
     }
