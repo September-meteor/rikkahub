@@ -678,6 +678,8 @@
   <string name="setting_display_page_show_thinking_content_title">Показывать содержание размышлений</string>
   <string name="setting_display_page_show_token_usage_desc">Отображать использование токенов и количество сообщений</string>
   <string name="setting_display_page_show_token_usage_title">Показывать статистику токенов и контекста</string>
+  <string name="setting_display_page_show_cumulative_token_usage_desc">Суммировать использование токенов по всем вызовам инструментов в одном сообщении, как в статистике официальной консоли</string>
+  <string name="setting_display_page_show_cumulative_token_usage_title">Показывать суммарное использование токенов</string>
   <string name="setting_display_page_show_updates_desc">Отображать ли уведомления об обновлениях приложения</string>
   <string name="setting_display_page_show_updates_title">Показывать обновления</string>
   <string name="setting_display_page_show_user_avatar_desc">Отображать аватар пользователя в сообщениях чата</string>

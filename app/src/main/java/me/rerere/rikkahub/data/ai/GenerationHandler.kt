@@ -17,7 +17,10 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
+import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.core.Tool
+import me.rerere.ai.core.UsageEntry
+import me.rerere.ai.core.merge
 import me.rerere.ai.provider.CustomBody
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.Provider
@@ -28,6 +31,7 @@ import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.ToolApprovalState
+import me.rerere.ai.ui.StreamChunk
 import me.rerere.ai.ui.StreamChunkHandler
 import me.rerere.ai.ui.handleTextGenerationResult
 import me.rerere.ai.ui.limitContext
@@ -89,6 +93,11 @@ class GenerationHandler(
 
         var messages: List<UIMessage> = messages
 
+        // 工具循环中每轮 API 请求的用量明细（跨请求累计）。
+        // 不在进入循环时无条件继承消息上的旧轮次：只有"审批中断恢复"（存在可续跑的工具）时
+        // 才继承，避免重新生成等场景误把旧消息的累计值叠加进来。
+        val usageEntries = mutableListOf<UsageEntry>()
+
         for (stepIndex in 0 until maxSteps) {
             Log.i(TAG, "streamText: start step #$stepIndex (${model.id})")
 
@@ -125,7 +134,7 @@ class GenerationHandler(
 
             // Skip generation if we have approved/denied tool calls to handle
             if (pendingTools.isEmpty()) {
-                generateInternal(
+                val step = generateInternal(
                     assistant = assistant,
                     settings = settings,
                     messages = messages,
@@ -162,6 +171,8 @@ class GenerationHandler(
                     conversationLorebookIds = conversationLorebookIds,
                     workspaceCwd = workspaceCwd,
                 )
+                // 累计本轮用量并立即写回消息，让底部信息栏实时更新
+                step.usage?.let { usageEntries += UsageEntry(tokens = it, durationMs = step.durationMs) }
                 messages = messages.visualTransforms(
                     transformers = outputTransformers,
                     context = context,
@@ -178,7 +189,8 @@ class GenerationHandler(
                 )
                 messages = messages.slice(0 until messages.lastIndex) + messages.last().copy(
                     finishedAt = Clock.System.now()
-                        .toLocalDateTime(TimeZone.currentSystemDefault())
+                        .toLocalDateTime(TimeZone.currentSystemDefault()),
+                    usageEntries = usageEntries.toList(),
                 )
                 emit(GenerationChunk.Messages(messages))
 
@@ -231,6 +243,10 @@ class GenerationHandler(
 
                 toolsToProcess = updatedTools
             } else {
+                // 审批中断恢复：继承上次循环已累计的轮次明细（仅续跑场景，防止误继承旧数据）
+                if (usageEntries.isEmpty()) {
+                    usageEntries += messages.last().usageEntries
+                }
                 // Resuming after user interaction - use the resumable tools directly.
                 Log.i(TAG, "generateText: resuming with ${pendingTools.size} resumable tools")
                 toolsToProcess = messages.last().getTools().filter { it.canResumeExecution }
@@ -360,7 +376,7 @@ class GenerationHandler(
         conversationModeInjectionIds: Set<Uuid> = emptySet(),
         conversationLorebookIds: Set<Uuid> = emptySet(),
         workspaceCwd: String? = null,
-    ) {
+    ): StepUsage {
         val internalMessages = buildList {
             val system = buildString {
                 val effectiveSystemPrompt =
@@ -417,15 +433,26 @@ class GenerationHandler(
         )
         if (stream) {
             val streamChunkHandler = StreamChunkHandler(model)
+            var stepUsage: TokenUsage? = null
+            val startTime = System.currentTimeMillis()
             providerImpl.streamText(
                 providerSetting = provider,
                 messages = internalMessages,
                 params = params
             ).collect {
+                // 轮内分片合并（如 Anthropic 的 message_start / message_delta 分开到达）
+                if (it is StreamChunk.Usage) {
+                    stepUsage = stepUsage.merge(it.usage)
+                }
                 messages = streamChunkHandler.handle(messages, it)
                 onUpdateMessages(messages)
             }
+            return StepUsage(
+                usage = stepUsage,
+                durationMs = System.currentTimeMillis() - startTime,
+            )
         } else {
+            val startTime = System.currentTimeMillis()
             val result = providerImpl.generateText(
                 providerSetting = provider,
                 messages = internalMessages,
@@ -433,6 +460,10 @@ class GenerationHandler(
             )
             messages = messages.handleTextGenerationResult(result = result, model = model)
             onUpdateMessages(messages)
+            return StepUsage(
+                usage = result.usage,
+                durationMs = System.currentTimeMillis() - startTime,
+            )
         }
     }
 
@@ -542,4 +573,10 @@ class GenerationHandler(
             }
         }
     }.flowOn(Dispatchers.IO)
+
+    /** 工具循环中一轮 API 请求的用量与该轮纯生成耗时（毫秒） */
+    private data class StepUsage(
+        val usage: TokenUsage?,
+        val durationMs: Long,
+    )
 }

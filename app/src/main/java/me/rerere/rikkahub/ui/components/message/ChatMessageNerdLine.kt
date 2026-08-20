@@ -17,7 +17,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import kotlinx.datetime.toJavaLocalDateTime
+import me.rerere.ai.core.cachedPercent
 import me.rerere.ai.ui.UIMessage
+import me.rerere.ai.ui.totalCompletionTokens
+import me.rerere.ai.ui.totalGenerationDurationMs
+import me.rerere.ai.ui.totalUsage
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Clock02
 import me.rerere.hugeicons.stroke.Download04
@@ -48,6 +52,12 @@ fun ChatMessageNerdLine(
             ) {
                 val usage = message.usage
                 if (settings.showTokenUsage && usage != null) {
+                    // 累计口径（开启后替代单次口径显示）；历史消息无轮次明细时回退单次 usage
+                    val displayUsage = if (settings.showCumulativeTokenUsage) {
+                        message.totalUsage() ?: usage
+                    } else {
+                        usage
+                    }
                     // Input tokens
                     StatsItem(
                         icon = {
@@ -59,11 +69,16 @@ fun ChatMessageNerdLine(
                             )
                         },
                         content = {
-                            Text(text = "${usage.promptTokens.formatNumber()} tokens")
-                            // Cached tokens
-                            if (usage.cachedTokens > 0) {
+                            Text(text = "${displayUsage.promptTokens.formatNumber()} tokens")
+                            // Cached tokens（附缓存命中占总输入的比例；输入为 0 时无法计算则省略百分比）
+                            val percent = displayUsage.cachedPercent()
+                            if (percent != null) {
                                 Text(
-                                    text = "(${message.usage?.cachedTokens?.formatNumber() ?: "0"} cached)"
+                                    text = "(${displayUsage.cachedTokens.formatNumber()} cached $percent%)"
+                                )
+                            } else if (displayUsage.cachedTokens > 0) {
+                                Text(
+                                    text = "(${displayUsage.cachedTokens.formatNumber()} cached)"
                                 )
                             }
                         }
@@ -78,7 +93,7 @@ fun ChatMessageNerdLine(
                             )
                         },
                         content = {
-                            Text(text = "${usage.completionTokens.formatNumber()} tokens")
+                            Text(text = "${displayUsage.completionTokens.formatNumber()} tokens")
                         }
                     )
                     // TPS
@@ -87,7 +102,18 @@ fun ChatMessageNerdLine(
                             message.createdAt.toJavaLocalDateTime(),
                             message.finishedAt!!.toJavaLocalDateTime()
                         )
-                        val tps = usage.completionTokens.toFloat() / duration.toMillis() * 1000
+                        // 有轮次明细时使用"本次消息总输出 / 纯生成耗时"（排除工具执行时间），
+                        // 避免多轮工具调用把速度压得过低；历史消息无明细时回退旧逻辑
+                        val tps = if (message.usageEntries.isNotEmpty()) {
+                            val generationMs = message.totalGenerationDurationMs()
+                            if (generationMs > 0) {
+                                message.totalCompletionTokens().toFloat() / generationMs * 1000
+                            } else {
+                                0f
+                            }
+                        } else {
+                            usage.completionTokens.toFloat() / duration.toMillis() * 1000
+                        }
                         val seconds = (duration.toMillis() / 1000f).toFixed(1)
                         StatsItem(
                             icon = {

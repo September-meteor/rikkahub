@@ -215,7 +215,30 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
                             Switch(
                                 checked = displaySetting.showTokenUsage,
                                 onCheckedChange = {
-                                    updateDisplaySetting(displaySetting.copy(showTokenUsage = it))
+                                    updateDisplaySetting(
+                                        displaySetting.copy(
+                                            showTokenUsage = it,
+                                            // 关闭统计时连带关闭累计口径，避免出现"统计隐藏但口径残留"的状态
+                                            showCumulativeTokenUsage = if (it) {
+                                                displaySetting.showCumulativeTokenUsage
+                                            } else {
+                                                false
+                                            }
+                                        )
+                                    )
+                                }
+                            )
+                        },
+                    )
+                    item(
+                        headlineContent = { Text(stringResource(R.string.setting_display_page_show_cumulative_token_usage_title)) },
+                        supportingContent = { Text(stringResource(R.string.setting_display_page_show_cumulative_token_usage_desc)) },
+                        trailingContent = {
+                            Switch(
+                                checked = displaySetting.showCumulativeTokenUsage,
+                                enabled = displaySetting.showTokenUsage,
+                                onCheckedChange = {
+                                    updateDisplaySetting(displaySetting.copy(showCumulativeTokenUsage = it))
                                 }
                             )
                         },

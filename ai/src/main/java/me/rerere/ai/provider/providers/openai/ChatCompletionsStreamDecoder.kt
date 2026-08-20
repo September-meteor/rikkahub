@@ -11,6 +11,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.TokenUsage
+import me.rerere.ai.core.merge
 import me.rerere.ai.provider.stream.DecodeResult
 import me.rerere.ai.provider.stream.SseEvent
 import me.rerere.ai.provider.stream.StreamChunkDecoder
@@ -35,6 +36,14 @@ internal class ChatCompletionsStreamDecoder : StreamChunkDecoder {
     private var responseModel: String? = null
     private var finishReason: String? = null
     private var finished = false
+
+    // 最后一条"完整"的 usage（含非零输入 Token）。部分中转会在流中途发送字段不完整的 usage
+    // （如只有 completion_tokens），直接提交会让生成过程中的输入 Token 显示为 0；
+    // 因此缓冲到本轮结束（finish）时再统一提交。
+    private var lastCompleteUsage: TokenUsage? = null
+    // 最后一条任意形态的 usage（兜底）：仅当整轮从未收到完整 usage 时使用，
+    // 避免特殊 endpoint（如只返回 completion_tokens）的合法用量被完全丢弃。
+    private var lastFallbackUsage: TokenUsage? = null
 
     override fun accept(event: SseEvent): DecodeResult {
         if (finished) return DecodeResult(completed = true)
@@ -77,7 +86,14 @@ internal class ChatCompletionsStreamDecoder : StreamChunkDecoder {
                     }
                     choice["finish_reason"]?.jsonPrimitive?.contentOrNull?.let { finishReason = it }
                 }
-                parseUsage(payload["usage"] as? JsonObject)?.let { add(StreamChunk.Usage(it)) }
+                parseUsage(payload["usage"] as? JsonObject)?.let { parsed ->
+                    // 完整 usage 用 merge 合并（而非直接覆盖）：当后一条 usage 部分字段缺失
+                    // （解析为 0）时，保留前一条已收到的非零字段（如 cachedTokens）。
+                    if (parsed.promptTokens > 0) {
+                        lastCompleteUsage = lastCompleteUsage.merge(parsed)
+                    }
+                    lastFallbackUsage = parsed
+                }
             }
         }
         return DecodeResult(chunks)
@@ -88,7 +104,12 @@ internal class ChatCompletionsStreamDecoder : StreamChunkDecoder {
     private fun finish(): List<StreamChunk> {
         if (finished) return emptyList()
         finished = true
-        return streamState.finish(finishReason, responseId, responseModel)
+        return buildList {
+            // 优先提交完整 usage；整轮无完整 usage 时退回最后一条（可能输入为 0，但至少保留输出），
+            // 完全无任何 usage 时不发出。
+            (lastCompleteUsage ?: lastFallbackUsage)?.let { add(StreamChunk.Usage(it)) }
+            addAll(streamState.finish(finishReason, responseId, responseModel))
+        }
     }
 
     private fun parseMessage(payload: JsonObject): UIMessage {

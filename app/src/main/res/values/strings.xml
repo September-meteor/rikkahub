@@ -721,6 +721,8 @@
   <string name="setting_display_page_show_thinking_content_title">Show Thinking Content</string>
   <string name="setting_display_page_show_token_usage_desc">Display token usage and message count</string>
   <string name="setting_display_page_show_token_usage_title">Show Token &amp; Context Stats</string>
+  <string name="setting_display_page_show_cumulative_token_usage_desc">Accumulate token usage across all tool-call requests in one message, matching the totals shown in the provider dashboard</string>
+  <string name="setting_display_page_show_cumulative_token_usage_title">Show Cumulative Token Usage</string>
   <string name="setting_display_page_show_updates_desc">Whether to display app update notifications</string>
   <string name="setting_display_page_show_updates_title">Show Updates</string>
   <string name="setting_display_page_show_user_avatar_desc">Whether to display user avatar in chat messages</string>

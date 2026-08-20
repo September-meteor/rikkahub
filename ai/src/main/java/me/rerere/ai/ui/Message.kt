@@ -6,6 +6,8 @@ import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.Serializable
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.TokenUsage
+import me.rerere.ai.core.UsageEntry
+import me.rerere.ai.core.sum
 import me.rerere.ai.util.json
 import kotlin.math.roundToInt
 import kotlin.time.Clock
@@ -23,6 +25,7 @@ data class UIMessage(
     val finishedAt: LocalDateTime? = null,
     val modelId: Uuid? = null,
     val usage: TokenUsage? = null,
+    val usageEntries: List<UsageEntry> = emptyList(),
     val translation: String? = null
 ) {
     fun summaryAsText(maxLength: Int = Int.MAX_VALUE): String {
@@ -493,4 +496,28 @@ fun <T> List<T>.migrateToolNodes(
     }
 
     return result
+}
+
+/**
+ * 该消息的累计 Token 消耗：所有轮次（工具循环中每次 API 请求）用量之和。
+ *
+ * 历史消息没有 [UIMessage.usageEntries]（旧版本数据），此时回退为单次 [UIMessage.usage]。
+ */
+fun UIMessage.totalUsage(): TokenUsage? {
+    if (usageEntries.isEmpty()) return usage
+    return usageEntries.fold(TokenUsage()) { acc, entry ->
+        acc.sum(entry.tokens) ?: acc
+    }
+}
+
+/** 累计输出 Token 数（所有轮次之和）。无轮次明细时回退为单次 usage。 */
+fun UIMessage.totalCompletionTokens(): Int {
+    if (usageEntries.isEmpty()) return usage?.completionTokens ?: 0
+    return usageEntries.sumOf { it.tokens.completionTokens }
+}
+
+/** 累计纯生成耗时（毫秒，不含工具执行）。无轮次明细时返回 0，调用方应回退旧逻辑。 */
+fun UIMessage.totalGenerationDurationMs(): Long {
+    if (usageEntries.isEmpty()) return 0L
+    return usageEntries.sumOf { it.durationMs }
 }
