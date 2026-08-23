@@ -5,11 +5,15 @@ import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
@@ -44,6 +48,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -54,7 +59,9 @@ import com.dokar.sonner.ToastType
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.time.LocalDateTime
 import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.UIMessagePart
@@ -72,6 +79,9 @@ import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.PriceAutoLabels
+import me.rerere.rikkahub.data.model.renderPrompt
+import me.rerere.rikkahub.data.model.resolvePriceSlot
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.ui.components.ai.ChatInput
@@ -787,6 +797,53 @@ private fun TopBar(
                                 fontSize = 8.sp,
                             )
                         )
+                    }
+                    // 实时 Token 价格提示：30 秒刷新一次，跨时段自动切换
+                    if (model != null && provider != null) {
+                        var currentTime by remember { mutableStateOf(LocalDateTime.now()) }
+                        LaunchedEffect(Unit) {
+                            while (true) {
+                                delay(30_000)
+                                currentTime = LocalDateTime.now()
+                            }
+                        }
+                        val priceSlot = resolvePriceSlot(
+                            priceSlots = model.priceSlots,
+                            defaultPriceSlot = model.defaultPriceSlot,
+                            now = currentTime,
+                        )
+                        if (priceSlot != null) {
+                            val rendered = priceSlot.renderPrompt(
+                                model = model,
+                                providerName = provider.name,
+                                now = currentTime,
+                                autoLabels = PriceAutoLabels(
+                                    prefix = stringResource(R.string.price_slot_current_price_prefix),
+                                    input = stringResource(R.string.price_slot_input_label),
+                                    cachedInput = stringResource(R.string.price_slot_cached_input_label),
+                                    output = stringResource(R.string.price_slot_output_label),
+                                ),
+                            )
+                            if (rendered.isNotBlank()) {
+                                Text(
+                                    text = rendered,
+                                    color = LocalContentColor.current.copy(0.9f),
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Medium,
+                                    ),
+                                    modifier = Modifier
+                                        .padding(top = 2.dp, bottom = 1.dp)
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(
+                                            runCatching {
+                                                Color(android.graphics.Color.parseColor(priceSlot.color))
+                                            }.getOrDefault(Color.Gray.copy(alpha = 0.3f))
+                                        )
+                                        .padding(horizontal = 4.dp, vertical = 1.dp),
+                                )
+                            }
+                        }
                     }
                 }
             }

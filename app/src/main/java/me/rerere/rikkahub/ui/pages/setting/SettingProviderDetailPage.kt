@@ -119,6 +119,7 @@ import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.pages.assistant.detail.CustomBodies
 import me.rerere.rikkahub.ui.pages.assistant.detail.CustomHeaders
+import me.rerere.rikkahub.ui.pages.setting.components.PriceSlotSettings
 import me.rerere.rikkahub.ui.pages.setting.components.ProviderConfigure
 import me.rerere.rikkahub.ui.pages.setting.components.ProviderConnectionTester
 import me.rerere.rikkahub.ui.pages.setting.components.SettingProviderBalanceOption
@@ -655,6 +656,17 @@ private fun ModelSettingsForm(
                             customBodies = model.customBodies,
                             onUpdate = { bodies ->
                                 onModelChange(model.copy(customBodies = bodies))
+                            }
+                        )
+
+                        PriceSlotSettings(
+                            priceSlots = model.priceSlots,
+                            defaultPriceSlot = model.defaultPriceSlot,
+                            onUpdatePriceSlots = { priceSlots ->
+                                onModelChange(model.copy(priceSlots = priceSlots))
+                            },
+                            onUpdateDefaultPriceSlot = { defaultPriceSlot ->
+                                onModelChange(model.copy(defaultPriceSlot = defaultPriceSlot))
                             }
                         )
                     }
