@@ -87,7 +87,10 @@ import dev.chrisbanes.haze.hazeSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import me.rerere.ai.core.TokenUsage
+import me.rerere.ai.core.sum
 import me.rerere.ai.ui.UIMessage
+import me.rerere.ai.ui.totalUsage
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.getAssistantById
@@ -304,6 +307,17 @@ private fun ChatListNormal(
             }
         }
 
+        // 截至每个消息节点的对话累计 Token 消耗（按各节点当前选中的消息版本计算）。
+        // 配合"显示累计 Token 消耗"开关：生成结束后，消息底部显示截至本条消息的对话累计值（官方控制台口径）；
+        // 生成中仍由 ChatMessageNerdLine 显示本条消息自己的消耗。用户消息无 usage，天然不参与累加。
+        val cumulativeUsages = remember(conversation.messageNodes) {
+            var acc = TokenUsage()
+            conversation.messageNodes.map { node ->
+                acc = acc.sum(node.messages[node.selectIndex].totalUsage()) ?: acc
+                acc
+            }
+        }
+
         ChatFontProvider(displaySetting = settings.displaySetting) {
             LazyColumn(
                 state = state,
@@ -337,6 +351,7 @@ private fun ChatListNormal(
                             model = node.currentMessage.modelId?.let(modelById::get),
                             assistant = assistant,
                             conversationId = conversation.id.toString(),
+                            cumulativeUsage = cumulativeUsages.getOrNull(index),
                             loading = loading && index == lastMessageIndex,
                             onRegenerate = {
                                 onRegenerate(node.currentMessage)

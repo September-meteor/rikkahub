@@ -678,7 +678,7 @@
   <string name="setting_display_page_show_thinking_content_title">思考内容を表示</string>
   <string name="setting_display_page_show_token_usage_desc">トークン使用量とメッセージ数を表示</string>
   <string name="setting_display_page_show_token_usage_title">トークンとコンテキスト統計を表示</string>
-  <string name="setting_display_page_show_cumulative_token_usage_desc">1つのメッセージ内のすべてのツール呼び出しリクエストのトークン使用量を累計して表示します（公式コンソールの統計と一致）</string>
+  <string name="setting_display_page_show_cumulative_token_usage_desc">会話全体のすべてのメッセージのトークン使用量を累計して表示します（各メッセージにはその時点までの累計値を表示、公式コンソールの統計と一致）</string>
   <string name="setting_display_page_show_cumulative_token_usage_title">累計トークン使用量を表示</string>
   <string name="setting_display_page_show_updates_desc">アプリのアップデート通知を表示するかどうか</string>
   <string name="setting_display_page_show_updates_title">アップデートを表示</string>

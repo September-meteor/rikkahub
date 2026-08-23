@@ -65,6 +65,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageAnnotation
@@ -108,6 +109,7 @@ fun ChatMessage(
     model: Model? = null,
     assistant: Assistant? = null,
     conversationId: String? = null,
+    cumulativeUsage: TokenUsage? = null,
     lastMessage: Boolean = false,
     onFork: () -> Unit,
     onRegenerate: () -> Unit,
@@ -295,7 +297,11 @@ fun ChatMessage(
         )
 
         ProvideTextStyle(textStyle) {
-            ChatMessageNerdLine(message = message)
+            ChatMessageNerdLine(
+                message = message,
+                cumulativeUsage = cumulativeUsage,
+                isGenerating = loading,
+            )
         }
 
     }

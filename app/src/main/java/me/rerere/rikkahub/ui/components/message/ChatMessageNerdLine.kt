@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import kotlinx.datetime.toJavaLocalDateTime
+import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.core.cachedPercent
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.totalCompletionTokens
@@ -40,6 +41,8 @@ fun ChatMessageNerdLine(
     message: UIMessage,
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f),
+    cumulativeUsage: TokenUsage? = null,
+    isGenerating: Boolean = false,
 ) {
     val settings = LocalSettings.current.displaySetting
 
@@ -52,11 +55,13 @@ fun ChatMessageNerdLine(
             ) {
                 val usage = message.usage
                 if (settings.showTokenUsage && usage != null) {
-                    // 累计口径（开启后替代单次口径显示）；历史消息无轮次明细时回退单次 usage
-                    val displayUsage = if (settings.showCumulativeTokenUsage) {
-                        message.totalUsage() ?: usage
-                    } else {
-                        usage
+                    // 累计口径：生成中显示"本次消息消耗"（随工具轮次实时增长），
+                    // 生成结束后切换为"对话累计"（截至本条消息，匹配官方控制台口径）。
+                    // 未传入累计值（其他调用方）或历史消息无轮次明细时，回退为本条消息自己的累计/单次 usage。
+                    val displayUsage = when {
+                        !settings.showCumulativeTokenUsage -> usage
+                        isGenerating -> message.totalUsage() ?: usage
+                        else -> cumulativeUsage ?: message.totalUsage() ?: usage
                     }
                     // Input tokens
                     StatsItem(
