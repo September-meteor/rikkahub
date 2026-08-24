@@ -1,5 +1,7 @@
 ## 环境配置
 
+[English](BUILDING.en.md) | [简体中文](BUILDING.md)
+
 ### 一、放置 google-services.json
 
 1. 前往 [Firebase Console](https://console.firebase.google.com/)，可能需要科学上网。
@@ -8,13 +10,13 @@
 
 3. 应用包名填 me.rerere.rikkahub，和 app/build.gradle 里的 `applicationId` 一致。
 
-> 若你打算构建 debug 包或修改了 `applicationId`，你应该添加对应的应用包名，如 debug 包是 me.rerere.rikkahub.dug。
+> 若你打算构建 debug 包或修改了 `applicationId`，你应该添加对应的应用包名，如 debug 包对应 me.rerere.rikkahub.dug。
 
 4. 下载 google-services.json，放到 app/ 目录下即可。
 
 ### 二、基础环境配置
 
-1. 基础工具和 JDK-17（如果没有，JDK-21（`openjdk-21-jdk`）也能兼容）。
+1. 基础工具和 JDK-17（如果没有，JDK-21 即 `openjdk-21-jdk` 也能兼容）。
 ```bash
 sudo apt update
 sudo apt install -y openjdk-17-jdk wget unzip git
@@ -56,7 +58,7 @@ yes | sdkmanager --licenses
 sdkmanager "platforms;android-37.0" "build-tools;37.0.0"
 ```
 
-4. 创建软链接，防止 Gradle 去找 android-37 找不到
+4. 创建软链接，防止 Gradle 去找 android-37 但找不到
 ```bash
 ln -s $ANDROID_HOME/platforms/android-37.0 $ANDROID_HOME/platforms/android-37
 ```
