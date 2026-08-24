@@ -1389,4 +1389,12 @@
   <string name="workspace_detail_sync_scanning_files_eta_updated">Отсканировано файлов: %1$d/%2$d (пересчитано: %3$s)</string>
   <string name="workspace_detail_sync_scanning_files_no_eta">Отсканировано файлов: %1$d/%2$d</string>
   <string name="workspace_detail_sync_scanning_almost_done">Почти готово</string>
+  <string name="backup_page_import_overwrite_confirm">Импорт резервной копии перезапишет данные приложения. Продолжить?</string>
+  <string name="setting_page_preferences_network">Сеть</string>
+  <string name="setting_page_preferences_network_desc">Настройки User-Agent и сетевых запросов</string>
+  <string name="setting_page_preferences_network_user_agent">User-Agent</string>
+  <string name="setting_page_preferences_network_user_agent_desc">Оставьте пустым, чтобы использовать %1$s</string>
+  <string name="setting_page_preferences_network_proxy">Прокси</string>
+  <string name="setting_page_preferences_network_proxy_desc">Поддерживает HTTP и SOCKS5 прокси-URL. Оставьте пустым для использования системных настроек.</string>
+  <string name="setting_page_preferences_network_proxy_invalid">Введите корректный URL прокси-сервера с хостом и портом.</string>
 </resources>

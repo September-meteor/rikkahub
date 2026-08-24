@@ -526,6 +526,7 @@ class ChatService(
                     }
                 },
                 assistant = assistant,
+                conversationId = conversationId,
                 conversationSystemPrompt = conversation.customSystemPrompt,
                 conversationModeInjectionIds = conversation.modeInjectionIds,
                 conversationLorebookIds = conversation.lorebookIds,

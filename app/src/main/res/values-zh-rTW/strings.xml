@@ -1387,4 +1387,12 @@
   <string name="workspace_detail_sync_scanning_files_eta_updated">檔案已掃描 %1$d/%2$d（更新 %3$s）</string>
   <string name="workspace_detail_sync_scanning_files_no_eta">檔案已掃描 %1$d/%2$d</string>
   <string name="workspace_detail_sync_scanning_almost_done">即將完成</string>
+  <string name="backup_page_import_overwrite_confirm">匯入備份將覆寫應用程式資料。是否繼續？</string>
+  <string name="setting_page_preferences_network">網路</string>
+  <string name="setting_page_preferences_network_desc">User-Agent 和網路請求設定</string>
+  <string name="setting_page_preferences_network_user_agent">User-Agent</string>
+  <string name="setting_page_preferences_network_user_agent_desc">留空以使用 %1$s</string>
+  <string name="setting_page_preferences_network_proxy">代理</string>
+  <string name="setting_page_preferences_network_proxy_desc">支援 HTTP 和 SOCKS5 代理網址。留空以使用系統設定。</string>
+  <string name="setting_page_preferences_network_proxy_invalid">請輸入包含主機和連接埠的有效代理 URL。</string>
 </resources>

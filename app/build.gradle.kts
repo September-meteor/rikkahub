@@ -22,8 +22,8 @@ android {
         applicationId = "me.rerere.rikkahub"
         minSdk = 26
         targetSdk = 37
-        versionCode = 177
-        versionName = "2.4.10"
+        versionCode = 178
+        versionName = "2.4.11"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -227,6 +227,9 @@ dependencies {
     // serialization
     implementation(libs.kotlinx.serialization.json)
 
+    // YAML front matter
+    implementation(libs.snakeyaml)
+
     // zxing
     implementation(libs.zxing.core)
 
@@ -288,6 +291,7 @@ dependencies {
     implementation(project(":highlight"))
     implementation(project(":search"))
     implementation(project(":speech"))
+    implementation(project(":videogen"))
     implementation(project(":common"))
     implementation(project(":material3"))
     implementation(project(":workspace"))

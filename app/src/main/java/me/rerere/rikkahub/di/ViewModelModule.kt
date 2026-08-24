@@ -72,6 +72,7 @@ val viewModelModule = module {
             id = it.get(),
             repository = get(),
             appContext = get(),
+            terminalSessionManager = get(),
         )
     }
     viewModelOf(::FavoriteVM)
