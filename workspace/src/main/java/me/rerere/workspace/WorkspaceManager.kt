@@ -1,5 +1,6 @@
 package me.rerere.workspace
 
+import android.util.Log
 import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
@@ -238,6 +239,13 @@ class WorkspaceManager(
         WorkspaceStorageArea.LINUX -> linuxDir(root)
     }
 
+    /**
+     * 清理临时文件，但**保留目录本身**：
+     * - PRoot 内部临时目录（每个命令的 TMPDIR 指向这里），应用内部目录，整个删除安全；
+     * - rootfs 的 /tmp 与 /var/tmp 只清**内容**不删目录——用户命令与工具
+     *   （如变更扫描器的 `find > /tmp/xxx`）依赖这些目录存在，删目录会让重定向全部失败；
+     *   若目录缺失则创建（fresh rootfs 可能没有）。
+     */
     fun cleanupAllTempDirs() {
         val roots = baseDir.listFiles()?.filter { it.isDirectory } ?: return
         for (dir in roots) {
@@ -245,13 +253,38 @@ class WorkspaceManager(
             if (!root.matches(ROOT_NAME_REGEX)) continue
             // PRoot temp files
             tempDir(root).let { if (it.exists()) it.deleteRecursively() }
-            // Rootfs /tmp and /var/tmp
-            File(linuxDir(root), "tmp").let { if (it.exists()) it.deleteRecursively() }
-            File(linuxDir(root), "var/tmp").let { if (it.exists()) it.deleteRecursively() }
+            // Rootfs /tmp、/var/tmp：清内容、保目录、缺失则建
+            listOf("tmp", "var/tmp").forEach { rel ->
+                File(linuxDir(root), rel).let { d ->
+                    if (d.isDirectory) {
+                        d.listFiles()?.forEach { it.deleteRecursively() }
+                    } else {
+                        d.mkdirs()
+                    }
+                    // 标准 /tmp 权限为 1777（含 sticky bit），java.io.File 无法设置 sticky，走 chmod。
+                    // - 参数数组直接 exec（不经 shell），路径不会被打断/注入；
+                    // - 幂等：当前权限已是 1777 则跳过；
+                    // - 显式检查退出码并记日志（runCatching 只捕获异常，捕获不了非零退出码）。
+                    val dirPath = d.absolutePath
+                    runCatching {
+                        val stat = Runtime.getRuntime().exec(arrayOf("stat", "-c", "%a", dirPath))
+                        val current = stat.inputStream.bufferedReader().readText().trim()
+                        stat.waitFor()
+                        if (current != "1777") {
+                            val chmod = Runtime.getRuntime().exec(arrayOf("chmod", "1777", dirPath))
+                            val code = chmod.waitFor()
+                            if (code != 0) Log.w(TAG, "chmod 1777 failed: $dirPath exit=$code")
+                        }
+                    }.onFailure { e ->
+                        Log.w(TAG, "ensure tmp sticky bit failed: $dirPath", e)
+                    }
+                }
+            }
         }
     }
 
     companion object {
+        private const val TAG = "WorkspaceManager"
         private const val FILES_DIR = "files"
         private const val LINUX_DIR = "linux"
         private const val TEMP_DIR = "tmp"
