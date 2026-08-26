@@ -85,12 +85,18 @@ private class ReasoningState(
 }
 
 @Composable
-private fun rememberReasoningState(reasoning: UIMessagePart.Reasoning): Pair<ReasoningState, Boolean> {
+private fun rememberReasoningState(
+    reasoning: UIMessagePart.Reasoning,
+    stateKey: Any,
+): Pair<ReasoningState, Boolean> {
     val settings = LocalSettings.current
     val loading = reasoning.finishedAt == null
     val scrollState = rememberScrollState()
 
-    val state = remember(reasoning.createdAt) {
+    // createdAt 在同一消息的多个 Reasoning part 之间可能重复（如 reasoning_text 与 summary_text
+    // 同毫秒创建，或经序列化/持久化往返后精度丢失），不能作为身份 key；由调用方传入稳定唯一的
+    // stateKey（消息内 part 下标），避免两个卡片共享同一份展开/计时状态。
+    val state = remember(stateKey) {
         ReasoningState(
             scrollState = scrollState,
             initialDuration = reasoning.finishedAt?.let { it - reasoning.createdAt }
@@ -206,13 +212,14 @@ private fun ReasoningContent(
 @Composable
 fun ChainOfThoughtScope.ChatMessageReasoningStep(
     reasoning: UIMessagePart.Reasoning,
+    stateKey: Any,
     model: Model?,
     assistant: Assistant?,
     fadeHeight: Float = 64f,
     collapsedAdaptiveWidth: Boolean = false,
     showTranslated: Boolean = false, // 是否显示译文
 ) {
-    val (state, loading) = rememberReasoningState(reasoning)
+    val (state, loading) = rememberReasoningState(reasoning, stateKey)
     val thinkingTitle = reasoning.reasoning.extractThinkingTitle()
     val showThinkingTitle = loading && thinkingTitle != null
     val chatFontFamily = LocalTextStyle.current.fontFamily

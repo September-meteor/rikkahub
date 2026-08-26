@@ -9,6 +9,8 @@ import me.rerere.ai.ui.UIMessagePart
 sealed interface ThinkingStep {
     data class ReasoningStep(
         val reasoning: UIMessagePart.Reasoning,
+        /** 该 part 在消息 parts 列表中的下标，用作 UI 稳定身份 key（createdAt 可能重复，不能作 key）。 */
+        val partIndex: Int,
     ) : ThinkingStep
 
     data class ToolStep(
@@ -46,7 +48,7 @@ fun List<UIMessagePart>.groupMessageParts(): List<MessagePartBlock> {
     this.fastForEachIndexed { index, part ->
         when (part) {
             is UIMessagePart.Reasoning -> {
-                currentThinkingSteps.add(ThinkingStep.ReasoningStep(part))
+                currentThinkingSteps.add(ThinkingStep.ReasoningStep(part, index))
             }
 
             is UIMessagePart.Tool -> {

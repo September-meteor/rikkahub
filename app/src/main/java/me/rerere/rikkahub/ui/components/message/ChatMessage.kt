@@ -434,9 +434,10 @@ private fun MessagePartsBlock(
                     ) { step ->
                         when (step) {
                             is ThinkingStep.ReasoningStep -> {
-                                key(step.reasoning.createdAt) {
+                                key(step.partIndex) {
                                     ChatMessageReasoningStep(
                                         reasoning = step.reasoning,
+                                        stateKey = step.partIndex,
                                         model = model,
                                         assistant = assistant,
                                         collapsedAdaptiveWidth = isReasoningOnlyBlock,
