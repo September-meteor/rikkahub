@@ -21,10 +21,18 @@ class RootfsPatcher {
     }
 
     /** 是否已完成过一次性环境初始化（避免每次命令都重复 patch） */
-    fun isPatched(linuxDir: File): Boolean = File(linuxDir, PATCH_MARKER).isFile
+    fun isPatched(linuxDir: File): Boolean {
+        // 迁移：旧版标记位于 rootfs 根目录（.rikkahub_patched_v1），已迁至 var/lib/rikkahub/patched_v1
+        File(linuxDir, LEGACY_PATCH_MARKER).delete()
+        return File(linuxDir, PATCH_MARKER).isFile
+    }
 
     private fun markPatched(linuxDir: File) {
-        File(linuxDir, PATCH_MARKER).writeText("1\n")
+        val marker = File(linuxDir, PATCH_MARKER)
+        marker.parentFile?.mkdirs()
+        marker.writeText("1\n")
+        // 顺带清理旧版根目录标记
+        File(linuxDir, LEGACY_PATCH_MARKER).delete()
     }
 
     private fun ensureRootfsDns(
@@ -176,7 +184,10 @@ class RootfsPatcher {
     private companion object {
         private const val MAX_DNS_SERVERS = 3
         private const val DEFAULT_HOSTNAME = "localhost"
-        private const val PATCH_MARKER = ".rikkahub_patched_v1"
+        /** rootfs 一次性初始化完成标记（FHS：应用状态存放于 /var/lib/<app>） */
+        private const val PATCH_MARKER = "var/lib/rikkahub/patched_v1"
+        /** 旧版标记（曾位于 rootfs 根目录），迁移用 */
+        private const val LEGACY_PATCH_MARKER = ".rikkahub_patched_v1"
         private val WHITESPACE_REGEX = Regex("\\s+")
         private val LOCAL_RESOLVERS = setOf(
             "127.0.0.1",
