@@ -287,7 +287,6 @@ private fun FileContentPreview(path: String?, code: String) {
  * 工作空间执行 Shell: 摘要显示退出状态与输出首部, 详情为命令 + stdout/stderr
  */
 object ShellToolUI : ToolUIRenderer {
-    private const val TITLE_MAX_CHARS = 40
     private const val SUMMARY_MAX_LINES = 8
 
     override val toolName: String = "workspace_shell"
@@ -296,10 +295,10 @@ object ShellToolUI : ToolUIRenderer {
 
     @Composable
     override fun title(context: ToolUIContext): String {
+        // 命令完整展示，不截断（与其余工具标题保持一致）
         val command = context.arguments.getStringContent("command") ?: return stringResource(R.string.tool_ui_shell_default)
         val preview = command.replace("\n", " ").trim()
-        val truncated = if (preview.length > TITLE_MAX_CHARS) preview.take(TITLE_MAX_CHARS) + "…" else preview
-        return stringResource(R.string.tool_ui_shell, truncated)
+        return stringResource(R.string.tool_ui_shell, preview)
     }
 
     override fun hasSummary(context: ToolUIContext): Boolean = context.content != null

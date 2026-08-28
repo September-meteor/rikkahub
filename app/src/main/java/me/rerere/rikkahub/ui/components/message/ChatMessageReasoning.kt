@@ -54,7 +54,6 @@ import me.rerere.rikkahub.ui.components.ui.ChainOfThoughtScope
 import me.rerere.rikkahub.ui.components.ui.DotLoading
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.modifier.shimmer
-import me.rerere.rikkahub.ui.components.ui.DotLoading
 import me.rerere.rikkahub.utils.extractThinkingTitle
 import kotlin.time.Clock
 import kotlin.time.Duration
@@ -88,6 +87,7 @@ private class ReasoningState(
 private fun rememberReasoningState(
     reasoning: UIMessagePart.Reasoning,
     stateKey: Any,
+    forceExpanded: Boolean = false,
 ): Pair<ReasoningState, Boolean> {
     val settings = LocalSettings.current
     val loading = reasoning.finishedAt == null
@@ -102,6 +102,13 @@ private fun rememberReasoningState(
             initialDuration = reasoning.finishedAt?.let { it - reasoning.createdAt }
                 ?: (Clock.System.now() - reasoning.createdAt)
         )
+    }
+
+    // 翻译时外部强制展开；forceExpanded 变为 false（切回原文）时保持现状，不强制收起/展开
+    LaunchedEffect(forceExpanded) {
+        if (forceExpanded) {
+            state.expandState = ReasoningCardState.Expanded
+        }
     }
 
     LaunchedEffect(reasoning.reasoning, loading) {
@@ -218,13 +225,14 @@ fun ChainOfThoughtScope.ChatMessageReasoningStep(
     fadeHeight: Float = 64f,
     collapsedAdaptiveWidth: Boolean = false,
     showTranslated: Boolean = false, // 是否显示译文
+    forceExpanded: Boolean = false, // 翻译时外部强制展开
 ) {
-    val (state, loading) = rememberReasoningState(reasoning, stateKey)
+    val (state, loading) = rememberReasoningState(reasoning, stateKey, forceExpanded)
     val thinkingTitle = reasoning.reasoning.extractThinkingTitle()
     val showThinkingTitle = loading && thinkingTitle != null
     val chatFontFamily = LocalTextStyle.current.fontFamily
 
-    // 判断是否正在翻译中（已请求翻译但译文为空字符串） // <-- 修改
+    // 判断是否正在翻译中（已请求翻译但译文为空字符串）
     val isTranslating = showTranslated && reasoning.translation == ""
 
     ControlledChainOfThoughtStep(
@@ -266,8 +274,16 @@ fun ChainOfThoughtScope.ChatMessageReasoningStep(
         collapsedAdaptiveWidth = collapsedAdaptiveWidth,
         contentVisible = state.expandState != ReasoningCardState.Collapsed,
         content = {
-            // 如果处于译文模式且正在翻译中，显示翻译中占位   // <-- 修改
-            if (isTranslating) {
+            // 译文模式且译文已并入第一条（此卡片无译文）：显示提示
+            if (showTranslated && reasoning.translation == null) {
+                Text(
+                    text = stringResource(R.string.reasoning_translation_merged_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(8.dp),
+                )
+            } else if (isTranslating) {
+                // 正在翻译中，显示占位
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -277,7 +293,7 @@ fun ChainOfThoughtScope.ChatMessageReasoningStep(
                 ) {
                     DotLoading(size = 10.dp)
                     Text(
-                        text = "翻译中...",
+                        text = stringResource(R.string.reasoning_translation_loading),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

@@ -31,8 +31,9 @@ sealed interface MessagePartBlock {
 }
 
 /**
- * 将 parts 分组成 ThinkingBlock 和 ContentBlock
- * 连续的 Reasoning、客户端 Tool 和 ServerTool 会被分组到一个 ThinkingBlock 中
+ * 将 parts 分组成 ThinkingBlock 和 ContentBlock。
+ * 连续的 Reasoning、客户端 Tool 和 ServerTool 会被分组到一个 ThinkingBlock 中（原逻辑）。
+ * 思维链与工具调用的折叠行为由 ChainOfThought 内部的步骤折叠控制，不在此拆分。
  */
 fun List<UIMessagePart>.groupMessageParts(): List<MessagePartBlock> {
     val result = mutableListOf<MessagePartBlock>()

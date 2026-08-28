@@ -316,6 +316,10 @@ class ChatVM(
     chatService.translateReasoning(_conversationId, message.id, targetLanguage)
 }
 
+    fun clearReasoningTranslation(message: UIMessage) {
+        chatService.clearReasoningTranslation(_conversationId, message.id)
+    }
+
     fun generateTitle(conversation: Conversation, force: Boolean = false) {
         viewModelScope.launch {
             val conversationFull = conversationRepo.getConversationById(conversation.id) ?: return@launch

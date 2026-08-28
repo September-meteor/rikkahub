@@ -30,6 +30,7 @@ import me.rerere.rikkahub.data.ai.prompts.DEFAULT_OCR_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_SUGGESTION_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_TITLE_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_TRANSLATION_PROMPT
+import me.rerere.rikkahub.data.ai.prompts.DEFAULT_REASONING_TRANSLATE_SEPARATOR
 import me.rerere.rikkahub.data.ai.prompts.LEARNING_MODE_PROMPT
 import me.rerere.asr.ASRProviderSetting
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV1Migration
@@ -156,6 +157,12 @@ class SettingsStore(
         // 图片压缩
         val ENABLE_IMAGE_COMPRESSION = booleanPreferencesKey("enable_image_compression")
         val IMAGE_MAX_DIMENSION = intPreferencesKey("image_max_dimension")
+
+        // 思维链翻译
+        val REASONING_TRANSLATE_SEND_SEPARATELY = booleanPreferencesKey("reasoning_translate_send_separately")
+        val REASONING_TRANSLATE_FALLBACK_MODE = stringPreferencesKey("reasoning_translate_fallback_mode")
+        val REASONING_TRANSLATE_SEPARATOR = stringPreferencesKey("reasoning_translate_separator")
+        val REASONING_TRANSLATE_EXPAND_ALL = booleanPreferencesKey("reasoning_translate_expand_all")
     }
 
     private val dataStore = context.settingsStore
@@ -252,6 +259,14 @@ class SettingsStore(
                 sponsorAlertDismissedAt = preferences[SPONSOR_ALERT_DISMISSED_AT] ?: 0,
                 enableImageCompression = preferences[ENABLE_IMAGE_COMPRESSION] != false,
                 imageMaxDimension = preferences[IMAGE_MAX_DIMENSION] ?: 2048,
+                reasoningTranslateSendSeparately = preferences[REASONING_TRANSLATE_SEND_SEPARATELY] == true,
+                reasoningTranslateFallbackMode = preferences[REASONING_TRANSLATE_FALLBACK_MODE]?.let {
+                    runCatching { JsonInstant.decodeFromString<ReasoningTranslateFallbackMode>(it) }
+                        .getOrNull()
+                } ?: ReasoningTranslateFallbackMode.FIRST,
+                reasoningTranslateSeparator = preferences[REASONING_TRANSLATE_SEPARATOR]
+                    ?: DEFAULT_REASONING_TRANSLATE_SEPARATOR.trim('\n'),
+                reasoningTranslateExpandAll = preferences[REASONING_TRANSLATE_EXPAND_ALL] == true,
             )
         }
         .map {
@@ -423,6 +438,11 @@ class SettingsStore(
             preferences[SPONSOR_ALERT_DISMISSED_AT] = settings.sponsorAlertDismissedAt
             preferences[ENABLE_IMAGE_COMPRESSION] = settings.enableImageCompression
             preferences[IMAGE_MAX_DIMENSION] = settings.imageMaxDimension
+            preferences[REASONING_TRANSLATE_SEND_SEPARATELY] = settings.reasoningTranslateSendSeparately
+            preferences[REASONING_TRANSLATE_FALLBACK_MODE] =
+                JsonInstant.encodeToString(settings.reasoningTranslateFallbackMode)
+            preferences[REASONING_TRANSLATE_SEPARATOR] = settings.reasoningTranslateSeparator
+            preferences[REASONING_TRANSLATE_EXPAND_ALL] = settings.reasoningTranslateExpandAll
         }
     }
 
@@ -517,6 +537,17 @@ class SettingsStore(
 }
 
 @Serializable
+enum class ReasoningTranslateFallbackMode {
+    /** A：强制打包发送、不插入分隔符，译文全部给第一条思维链；短思维链收起并显示提示 */
+    @SerialName("first")
+    FIRST,
+
+    /** B：可打包（卡片间插入分隔符，按分隔符拆回各卡片）或分开发送（逐条请求） */
+    @SerialName("even")
+    EVEN,
+}
+
+@Serializable
 data class Settings(
     @Transient
     val init: Boolean = false,
@@ -570,6 +601,12 @@ data class Settings(
     val sponsorAlertDismissedAt: Int = 0,
     val enableImageCompression: Boolean = true,
     val imageMaxDimension: Int = 2048,
+
+    // 思维链翻译（实验性）
+    val reasoningTranslateSendSeparately: Boolean = false,
+    val reasoningTranslateFallbackMode: ReasoningTranslateFallbackMode = ReasoningTranslateFallbackMode.FIRST,
+    val reasoningTranslateSeparator: String = DEFAULT_REASONING_TRANSLATE_SEPARATOR.trim('\n'),
+    val reasoningTranslateExpandAll: Boolean = false,
 ) {
     companion object {
         // 构造一个用于初始化的settings, 但它不能用于保存，防止使用初始值存储

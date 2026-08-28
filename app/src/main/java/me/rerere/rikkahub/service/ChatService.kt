@@ -50,6 +50,8 @@ import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.GenerationChunk
 import me.rerere.rikkahub.data.ai.GenerationHandler
+import me.rerere.rikkahub.data.ai.prompts.DEFAULT_REASONING_TRANSLATE_SEPARATOR
+import me.rerere.rikkahub.data.datastore.ReasoningTranslateFallbackMode
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.ai.tools.createConversationTools
 import me.rerere.rikkahub.data.ai.tools.local.LocalTools
@@ -1207,7 +1209,12 @@ class ChatService(
     }
 
     /**
-     * 翻译思维链 (修改点：先设置空翻译，支持流式更新)
+     * 翻译思维链
+     *
+     * 行为 A（默认，强制打包、不插分隔符）：全部译文给第一条思维链，
+     * 其余短思维链收起并显示提示（展开后为空行）。
+     * 行为 B（发送方式可选）：打包时多卡片间插入分隔符、流式按分隔符拆分写回各卡片；
+     * 逐条时每条独立请求写回对应卡片。
      */
     fun translateReasoning(
         conversationId: Uuid,
@@ -1222,39 +1229,126 @@ class ChatService(
                 val message = currentConversation.currentMessages.find { it.id == messageId }
                     ?: return@launch
 
-                val reasoningText = message.parts
+                val reasoningParts = message.parts
                     .filterIsInstance<UIMessagePart.Reasoning>()
-                    .joinToString("\n\n") { it.reasoning }
-                    .trim()
+                if (reasoningParts.isEmpty()) return@launch
+                val partCount = reasoningParts.size
 
-                if (reasoningText.isBlank()) return@launch
+                // 先设置空 translation 触发 UI 显示"翻译中"状态
+                clearReasoningTranslationField(conversationId, messageId, "")
 
-                // 先设置一个空的 translation 来触发 UI 显示"翻译中"状态
-                updateReasoningTranslationField(conversationId, messageId, "")
+                when (settings.reasoningTranslateFallbackMode) {
+                    // 行为 A：强制打包、不插分隔符，译文全部给第一条
+                    ReasoningTranslateFallbackMode.FIRST -> {
+                        val combinedText = reasoningParts.joinToString("\n\n") { it.reasoning }.trim()
+                        if (combinedText.isBlank()) return@launch
 
-                generationHandler.translateText(
-                    settings = settings,
-                    sourceText = reasoningText,
-                    targetLanguage = targetLanguage
-                ) { translatedText ->
-                    // 流式更新翻译内容
-                    updateReasoningTranslationField(conversationId, messageId, translatedText)
-                }.collect { }
+                        generationHandler.translateText(
+                            settings = settings,
+                            sourceText = combinedText,
+                            targetLanguage = targetLanguage,
+                        ) { translatedText ->
+                            updateReasoningTranslationField(conversationId, messageId, 0, translatedText)
+                        }.collect { }
+
+                        // 其余短思维链置为"无译文"状态（UI 显示收起+提示）
+                        for (i in 1 until partCount) {
+                            updateReasoningTranslationField(conversationId, messageId, i, null)
+                        }
+                    }
+
+                    // 行为 B：发送方式可选
+                    ReasoningTranslateFallbackMode.EVEN -> {
+                        if (settings.reasoningTranslateSendSeparately) {
+                            // 逐条发送：每条独立请求，译文写回对应卡片
+                            reasoningParts.forEachIndexed { index, part ->
+                                if (part.reasoning.isBlank()) return@forEachIndexed
+                                generationHandler.translateText(
+                                    settings = settings,
+                                    sourceText = part.reasoning,
+                                    targetLanguage = targetLanguage,
+                                ) { translatedText ->
+                                    updateReasoningTranslationField(conversationId, messageId, index, translatedText)
+                                }.collect { }
+                            }
+                        } else {
+                            // 打包发送：分隔符合并，一次请求，流式按分隔符拆分。
+                            // 存储的分隔符不带首尾空行（设置页只让用户填中间标记），
+                            // 发送时统一包装成 "\n\n<标记>\n\n" 与正文隔离。
+                            val rawSeparator = settings.reasoningTranslateSeparator
+                                .ifBlank { DEFAULT_REASONING_TRANSLATE_SEPARATOR.trim('\n') }
+                            val separator = "\n\n${rawSeparator.trim('\n')}\n\n"
+                            val combinedText = reasoningParts.joinToString(separator) { it.reasoning }.trim()
+                            if (combinedText.isBlank()) return@launch
+
+                            val buffer = StringBuilder()
+
+                            generationHandler.translateText(
+                                settings = settings,
+                                sourceText = combinedText,
+                                targetLanguage = targetLanguage,
+                                separator = separator,
+                            ) { translatedText ->
+                                // 每次回调传入累计全文（onStreamUpdate 语义为累计）。
+                                // 每次都从累计全文重新切分，绝不复用跨回调的 segments 累积列表，
+                                // 否则段落会被重复提取（重复 bug 根因）。
+                                buffer.setLength(0)
+                                buffer.append(translatedText)
+                                val freshSegments = mutableListOf<String>()
+                                extractReasoningSegments(buffer, separator, freshSegments)
+                                // 流式更新：已拆出的段落写回对应 part，未完成段实时写回当前 part
+                                updateReasoningTranslationFields(
+                                    conversationId = conversationId,
+                                    messageId = messageId,
+                                    segments = freshSegments,
+                                    pending = buffer.toString(),
+                                )
+                            }.collect { }
+                        }
+                    }
+                }
 
                 saveConversation(conversationId, getConversationFlow(conversationId).value)
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 // 出错时清空翻译字段
-                clearReasoningTranslationField(conversationId, messageId)
+                clearReasoningTranslationField(conversationId, messageId, null)
                 addError(e, conversationId, title = context.getString(R.string.error_title_translate_message))
             }
         }
     }
 
     /**
-     * 更新思维链翻译字段
+     * 清空思维链翻译字段（只清思维链译文，不动整条消息的 translation）
      */
-    private fun updateReasoningTranslationField(
+    fun clearReasoningTranslation(conversationId: Uuid, messageId: Uuid) {
+        clearReasoningTranslationField(conversationId, messageId, null)
+    }
+
+    /**
+     * 从流式缓冲区中提取分隔符之间的完整段落。
+     * 缓冲区尾部可能残留不完整的分隔符前缀或半截段落，保留等待后续增量。
+     */
+    private fun extractReasoningSegments(
+        buffer: StringBuilder,
+        separator: String,
+        segments: MutableList<String>,
+    ) {
+        while (true) {
+            val idx = buffer.indexOf(separator)
+            if (idx < 0) break
+            val segment = buffer.substring(0, idx).trim()
+            if (segment.isNotEmpty()) {
+                segments.add(segment)
+            }
+            buffer.delete(0, idx + separator.length)
+        }
+    }
+
+    /**
+     * 更新思维链翻译字段（全部 part 统一值）
+     */
+    private fun clearReasoningTranslationField(
         conversationId: Uuid,
         messageId: Uuid,
         translationText: String?
@@ -1279,13 +1373,76 @@ class ChatService(
     }
 
     /**
-     * 清空思维链翻译字段 (新增)
+     * 更新思维链翻译字段（按 part 下标）
      */
-    private fun clearReasoningTranslationField(
+    private fun updateReasoningTranslationField(
         conversationId: Uuid,
-        messageId: Uuid
+        messageId: Uuid,
+        reasoningIndex: Int,
+        translationText: String?
     ) {
-        updateReasoningTranslationField(conversationId, messageId, null)
+        val currentConversation = getConversationFlow(conversationId).value
+        val updatedNodes = currentConversation.messageNodes.map { node ->
+            if (node.messages.any { it.id == messageId }) {
+                val updatedMessages = node.messages.map { msg ->
+                    if (msg.id == messageId) {
+                        var index = 0
+                        val updatedParts = msg.parts.map { part ->
+                            if (part is UIMessagePart.Reasoning) {
+                                val current = index
+                                index++
+                                if (current == reasoningIndex) {
+                                    part.copy(translation = translationText)
+                                } else part
+                            } else part
+                        }
+                        msg.copy(parts = updatedParts)
+                    } else msg
+                }
+                node.copy(messages = updatedMessages)
+            } else node
+        }
+        updateConversation(conversationId, currentConversation.copy(messageNodes = updatedNodes))
+    }
+
+    /**
+     * 按顺序更新思维链翻译字段。
+     * [segments] 为已完整拆出的段落（segments[i] → 第 i 个 Reasoning part）；
+     * [pending] 为流式中尚未完成的当前段，实时写回第 segments.size 个 part，
+     * 使单段/流式中译文也能实时刷新。
+     */
+    private fun updateReasoningTranslationFields(
+        conversationId: Uuid,
+        messageId: Uuid,
+        segments: List<String>,
+        pending: String = "",
+    ) {
+        val currentConversation = getConversationFlow(conversationId).value
+        val updatedNodes = currentConversation.messageNodes.map { node ->
+            if (node.messages.any { it.id == messageId }) {
+                val updatedMessages = node.messages.map { msg ->
+                    if (msg.id == messageId) {
+                        var reasoningIndex = 0
+                        val updatedParts = msg.parts.map { part ->
+                            if (part is UIMessagePart.Reasoning) {
+                                val index = reasoningIndex++
+                                val translation = if (index < segments.size) {
+                                    segments[index]
+                                } else if (index == segments.size && pending.isNotBlank()) {
+                                    pending
+                                } else {
+                                    null
+                                }
+                                part.copy(translation = translation)
+                            } else part
+                        }
+                        msg.copy(parts = updatedParts)
+                    } else msg
+                }
+                node.copy(messages = updatedMessages)
+            } else node
+        }
+        updateConversation(conversationId, currentConversation.copy(messageNodes = updatedNodes))
     }
 
     // ---- 消息操作 ----

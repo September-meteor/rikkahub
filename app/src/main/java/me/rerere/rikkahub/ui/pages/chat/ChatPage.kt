@@ -516,6 +516,9 @@ private fun ChatPageContent(
                 onTranslateReasoning = { message, locale ->
                     vm.translateReasoning(message, locale)
                 },
+                onClearReasoningTranslation = { message ->
+                    vm.clearReasoningTranslation(message)
+                },
             )
         }
 

@@ -24,6 +24,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -74,11 +75,29 @@ fun <T> ChainOfThought(
     steps: List<T>,
     collapsedVisibleCount: Int = 2,
     collapsedAdaptiveWidth: Boolean = false,
+    forceExpanded: Boolean = false,
     content: @Composable ChainOfThoughtScope.(T) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
+    // 翻译时外部强制展开：首次为 true 时把内部 expanded 置为 true 并保持，
+    // 之后 forceExpanded 变 false 也不自动缩回（用户可手动折叠），
+    // 保证"再点翻译切回原文"时展开状态不被改变。
+    LaunchedEffect(forceExpanded) {
+        if (forceExpanded) {
+            expanded = true
+        }
+    }
+    // 只要有超过折叠阈值的步骤，就始终显示收起/展开控制栏（翻译展开后也可手动收起）
     val canCollapse = steps.size > collapsedVisibleCount
     val shouldFillCollapseControlWidth = expanded || !collapsedAdaptiveWidth
+
+    // 折叠时保留尾部 collapsedVisibleCount 步（原逻辑）
+    val visibleSteps = if (expanded || !canCollapse) {
+        steps
+    } else {
+        steps.takeLast(collapsedVisibleCount)
+    }
+    val hiddenCount = steps.size - visibleSteps.size
 
     CompositionLocalProvider(
         LocalCardColor provides cardColors.containerColor
@@ -95,12 +114,6 @@ fun <T> ChainOfThought(
                         animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec()
                     ),
             ) {
-                val visibleSteps = if (expanded || !canCollapse) {
-                    steps
-                } else {
-                    steps.takeLast(collapsedVisibleCount)
-                }
-
                 // 显示展开/折叠按钮（统一在顶部）
                 if (canCollapse) {
                     Row(
@@ -138,7 +151,7 @@ fun <T> ChainOfThought(
                             } else {
                                 stringResource(
                                     R.string.chain_of_thought_show_more_steps,
-                                    steps.size - collapsedVisibleCount
+                                    hiddenCount
                                 )
                             },
                             style = MaterialTheme.typography.labelMedium,

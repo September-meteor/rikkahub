@@ -630,7 +630,8 @@ class GenerationHandler(
         settings: Settings,
         sourceText: String,
         targetLanguage: Locale,
-        onStreamUpdate: ((String) -> Unit)? = null
+        separator: String? = null,
+        onStreamUpdate: ((String) -> Unit)? = null,
     ): Flow<String> = flow {
         val model = settings.providers.findModelById(settings.translateModeId)
             ?: error("Translation model not found")
@@ -644,7 +645,18 @@ class GenerationHandler(
             val prompt = settings.translatePrompt.applyPlaceholders(
                 "source_text" to sourceText,
                 "target_lang" to targetLanguage.toString(),
-            )
+                // 让自定义 prompt 里也可以引用分隔符占位符；未引用时下面会追加说明
+                "separator" to (separator ?: ""),
+            ).let { basePrompt ->
+                if (separator != null && "{separator}" !in settings.translatePrompt) {
+                    // 用户 prompt 未引用 {separator}，为保证多段拆分正确，追加保留分隔符的说明
+                    "$basePrompt\n\nThe source text may contain multiple sections separated by the marker $separator. " +
+                        "Keep every $separator marker exactly as-is in your translation; do not translate, add or remove it. " +
+                        "Translate only the content between markers.\n"
+                } else {
+                    basePrompt
+                }
+            }
 
             var messages = listOf(UIMessage.user(prompt))
             var translatedText = ""

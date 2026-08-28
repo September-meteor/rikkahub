@@ -124,9 +124,11 @@ fun ChatMessage(
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
     onTranslateReasoning: ((UIMessage, Locale) -> Unit)? = null,
+    onClearReasoningTranslation: ((UIMessage) -> Unit)? = null,
 ) {
     val message = node.messages[node.selectIndex]
-    val settings = LocalSettings.current.displaySetting
+    val fullSettings = LocalSettings.current
+    val settings = fullSettings.displaySetting
     val chatFontFamily = LocalChatFontFamily.current ?: rememberChatFontFamily(settings)
     val textStyle = LocalTextStyle.current.copy(
         fontSize = LocalTextStyle.current.fontSize * settings.fontSizeRatio,
@@ -182,7 +184,7 @@ fun ChatMessage(
             .firstNotNullOfOrNull { it.translation }
     }
 
-    // <-- 修改：判断是否正在翻译中（translation 为空字符串表示正在翻译）
+    // 判断是否正在翻译中（translation 为空字符串表示正在翻译）
     val isReasoningTranslating = remember(message) {
         message.parts
             .filterIsInstance<UIMessagePart.Reasoning>()
@@ -208,7 +210,7 @@ fun ChatMessage(
                     loading = loading,
                     reasoningText = reasoningText,
                     modifier = Modifier.weight(1f),
-                    // <-- 修改：优化点击逻辑
+                    // 优化点击逻辑
                     onToggleTranslateReasoning = {
                         if (isReasoningTranslating) {
                             // 正在翻译中：切换回原文视图
@@ -226,7 +228,7 @@ fun ChatMessage(
                     targetLanguage = reasoningTargetLang,
                     showTranslated = showTranslatedReasoning,
                     hasTranslation = reasoningTranslation != null && reasoningTranslation.isNotBlank(),
-                    isTranslating = isReasoningTranslating,   // <-- 修改：传入翻译中状态
+                    isTranslating = isReasoningTranslating,   // 传入翻译中状态
                 )
                 ChatMessageUserAvatar(
                     message = message,
@@ -248,6 +250,7 @@ fun ChatMessage(
                 onToolAnswer = onToolAnswer,
                 onUserMessageClick = if (message.role == MessageRole.USER) onEdit else null,
                 showTranslatedReasoning = showTranslatedReasoning,
+                expandReasoningAll = fullSettings.reasoningTranslateExpandAll,
             )
 
             message.translation?.let { translation ->
@@ -357,6 +360,9 @@ fun ChatMessage(
             },
             onClearTranslation = {
                 showReasoningLangDialog = false
+                // 清空译文并切回原文视图，否则 translation=null 会被当作"并入第一条"提示显示
+                showTranslatedReasoning = false
+                onClearReasoningTranslation?.invoke(message)
             },
             onDismissRequest = {
                 showReasoningLangDialog = false
@@ -378,6 +384,7 @@ private fun MessagePartsBlock(
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
     onUserMessageClick: (() -> Unit)? = null,
     showTranslatedReasoning: Boolean = false,
+    expandReasoningAll: Boolean = false,
 ) {
     val context = LocalContext.current
     val contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
@@ -419,15 +426,26 @@ private fun MessagePartsBlock(
 
     // Render parts in original order (group thinking/tool as chain-of-thought)
     val groupedParts = remember(parts) { parts.groupMessageParts() }
+    // 翻译时强制展开折叠容器，保证所有思维链步骤可见（否则会被 takeLast(2) 藏掉）
+    // 只展开第一条思维链（长思维链）：取整个消息的第一个 Reasoning 的全局 part 下标；
+    // 设置展开全部时展开所有思维链。
+    val firstReasoningPartIndex = remember(parts) {
+        parts.indexOfFirst { it is UIMessagePart.Reasoning }.takeIf { it >= 0 }
+    }
     groupedParts.fastForEach { block ->
         when (block) {
             is MessagePartBlock.ThinkingBlock -> {
                 if (block.steps.isNotEmpty()) {
                     val isReasoningOnlyBlock = block.steps.fastAll { it is ThinkingStep.ReasoningStep }
+                    // 翻译时容器总是展开（打开折叠），防止第一条思维链被 takeLast 隐藏；
+                    // 具体展开哪些 step 由 step 级 forceExpanded 控制：
+                    //  - 只展开第一条：仅第一条 step 展开，其余步骤只显示标题栏
+                    //  - 展开全部：所有 step 展开
                     ChainOfThought(
                         modifier = Modifier.animateContentSize(),
                         steps = block.steps,
                         collapsedAdaptiveWidth = isReasoningOnlyBlock,
+                        forceExpanded = showTranslatedReasoning,
                         cardColors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = settings.displaySetting.bubbleOpacity),
                         ),
@@ -442,6 +460,8 @@ private fun MessagePartsBlock(
                                         assistant = assistant,
                                         collapsedAdaptiveWidth = isReasoningOnlyBlock,
                                         showTranslated = showTranslatedReasoning,
+                                        forceExpanded = showTranslatedReasoning &&
+                                            (expandReasoningAll || step.partIndex == firstReasoningPartIndex),
                                     )
                                 }
                             }
