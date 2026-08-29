@@ -1426,4 +1426,18 @@
   <string name="setting_files_page_clean_all">所有檔案</string>
   <string name="setting_files_page_clean_older_than_days">%1$d 天前</string>
   <string name="setting_files_page_clean_range_description">選擇要永久刪除的檔案。此操作無法復原。</string>
+  <string name="setting_update_group_download">更新下載</string>
+  <string name="setting_update_group_message">訊息通知</string>
+  <string name="setting_update_group_reminder">更新提醒</string>
+  <string name="setting_update_mirror_desc">GitHub 直連失敗時使用。留空表示僅直連。</string>
+  <string name="setting_update_mirror_direct">直連（不使用鏡像）</string>
+  <string name="setting_update_mirror_title">下載鏡像</string>
+  <string name="setting_update_reminder_disabled_forever">更新提醒已永久關閉</string>
+  <string name="setting_update_reminder_pause_forever">永久</string>
+  <string name="setting_update_source_fork">本分支（GitHub Releases）</string>
+  <string name="setting_update_source_official">官方 RikkaHub</string>
+  <string name="setting_update_source_title">更新源</string>
+  <string name="update_card_downloading_via_mirror">直連不可用，已切換鏡像下載</string>
+  <string name="update_card_downloading_via_mirror_desc">正在透過鏡像下載更新包...</string>
+  <string name="update_card_recommended_format">%1$s（推薦）</string>
 </resources>

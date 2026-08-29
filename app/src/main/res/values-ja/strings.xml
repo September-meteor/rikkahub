@@ -1428,4 +1428,18 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_files_page_clean_all">すべてのファイル</string>
   <string name="setting_files_page_clean_older_than_days">%1$d日以上前</string>
   <string name="setting_files_page_clean_range_description">完全に削除するファイルを選択してください。この操作は元に戻せません。</string>
+  <string name="setting_update_group_download">アップデートのダウンロード</string>
+  <string name="setting_update_group_message">メッセージ通知</string>
+  <string name="setting_update_group_reminder">アップデート通知</string>
+  <string name="setting_update_mirror_desc">GitHub の直接接続に失敗した場合に使用されます。空のままにすると直接接続のみ使用します。</string>
+  <string name="setting_update_mirror_direct">直接ダウンロード（ミラーを使用しない）</string>
+  <string name="setting_update_mirror_title">ダウンロードミラー</string>
+  <string name="setting_update_reminder_disabled_forever">アップデート通知は永久的に無効になっています</string>
+  <string name="setting_update_reminder_pause_forever">無期限</string>
+  <string name="setting_update_source_fork">このフォーク（GitHub Releases）</string>
+  <string name="setting_update_source_official">公式 RikkaHub</string>
+  <string name="setting_update_source_title">アップデート元</string>
+  <string name="update_card_downloading_via_mirror">直接接続できないため、ミラーに切り替えました</string>
+  <string name="update_card_downloading_via_mirror_desc">ミラー経由でダウンロード中...</string>
+  <string name="update_card_recommended_format">%1$s（推奨）</string>
 </resources>

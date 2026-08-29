@@ -1,11 +1,12 @@
 package me.rerere.rikkahub.ui.components.ui
 
+import android.content.Context
+import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -20,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,20 +37,34 @@ import com.dokar.sonner.ToastType
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Download01
-import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.hooks.useThrottle
 import me.rerere.rikkahub.ui.pages.chat.ChatVM
 import me.rerere.rikkahub.utils.UpdateDownload
-import me.rerere.rikkahub.utils.Version
 import me.rerere.rikkahub.utils.onError
 import me.rerere.rikkahub.utils.onSuccess
 import me.rerere.rikkahub.utils.toLocalDateTime
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 import kotlin.time.toJavaInstant
+import java.util.zip.ZipFile
+
+private val LIB_ABI_PATTERN = Regex("^lib/([^/]+)/")
+
+/**
+ * 解析当前安装 APK 包含的原生库 ABI，用于在更新时沿用与已安装包相同的架构。
+ * 专用包（如 arm64-v8a）返回单个 ABI；universal 包返回多个 ABI；解析失败返回空列表。
+ */
+private fun installedApkAbis(context: Context): List<String> = runCatching {
+    ZipFile(context.applicationInfo.sourceDir).use { zip ->
+        zip.entries().asSequence()
+            .mapNotNull { entry -> LIB_ABI_PATTERN.find(entry.name)?.groupValues?.get(1) }
+            .distinct()
+            .toList()
+    }
+}.getOrDefault(emptyList())
 
 @OptIn(ExperimentalTime::class)
 @Composable
@@ -80,44 +96,57 @@ fun UpdateCard(vm: ChatVM) {
     state.onSuccess { info ->
         var showDetail by remember { mutableStateOf(false) }
         var dismissed by remember { mutableStateOf(false) }
-        val current = remember { Version(BuildConfig.VERSION_NAME) }
-        val latest = remember(info) { Version(info.version) }
-        if (latest > current && !dismissed) {
+        var visible by remember { mutableStateOf(false) }
+        LaunchedEffect(info) {
+            visible = vm.updateChecker.shouldShowUpdate(info)
+        }
+        // 沿用当前安装 APK 的架构筛选下载项：优先推荐与已安装包相同类型的 APK，universal 兜底。
+        // 专用包（如 arm64-v8a）解析出单个 ABI；universal 包解析出多个 ABI。
+        val installedAbis = remember { installedApkAbis(context) }
+        val prefersUniversal = installedAbis.size > 1
+        val preferredAbis = installedAbis.ifEmpty { Build.SUPPORTED_ABIS.toList() }
+        val downloads = remember(info) {
+            if (prefersUniversal) {
+                // 已装 universal 包：继续提供 universal，避免换架构
+                info.downloads
+                    .filter { item -> item.name.contains("universal") }
+                    .ifEmpty { info.downloads }
+            } else {
+                // 已装专用包：优先匹配相同架构，universal 兜底
+                info.downloads
+                    .filter { item ->
+                        item.name.contains("universal") || preferredAbis.any { abi -> item.name.contains(abi) }
+                    }
+                    .sortedByDescending { item -> if (item.name.contains("universal")) 1 else 2 }
+                    .ifEmpty { info.downloads }
+            }
+        }
+        if (visible && !dismissed) {
             Card(
                 onClick = {
                     showDetail = true
                 }
             ) {
-                Column(
+                Row(
                     modifier = Modifier
-                        .padding(8.dp)
-                        .fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                        .fillMaxWidth()
+                        .padding(start = 12.dp, end = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = stringResource(R.string.update_card_new_version_found, info.version),
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.weight(1f)
-                        )
-                        IconButton(onClick = { dismissed = true }) {
-                            Icon(
-                                imageVector = HugeIcons.Cancel01,
-                                contentDescription = stringResource(R.string.update_card_close),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                    MarkdownBlock(
-                        content = info.changelog,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.heightIn(max = 200.dp)
+                    Text(
+                        text = stringResource(R.string.update_card_new_version_found, info.version),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.weight(1f)
                     )
+                    IconButton(onClick = { dismissed = true }) {
+                        Icon(
+                            imageVector = HugeIcons.Cancel01,
+                            contentDescription = stringResource(R.string.update_card_close),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         }
@@ -156,7 +185,11 @@ fun UpdateCard(vm: ChatVM) {
                             .verticalScroll(rememberScrollState()),
                         style = MaterialTheme.typography.bodyMedium
                     )
-                    info.downloads.fastForEach { downloadItem ->
+                    downloads.fastForEach { downloadItem ->
+                        val isRecommended = when {
+                            prefersUniversal -> downloadItem.name.contains("universal")
+                            else -> preferredAbis.any { abi -> downloadItem.name.contains(abi) }
+                        }
                         OutlinedCard(
                             onClick = {
                                 downloadHandler(downloadItem)
@@ -165,7 +198,11 @@ fun UpdateCard(vm: ChatVM) {
                             ListItem(
                                 headlineContent = {
                                     Text(
-                                        text = downloadItem.name,
+                                        text = if (isRecommended) {
+                                            stringResource(R.string.update_card_recommended_format, downloadItem.name)
+                                        } else {
+                                            downloadItem.name
+                                        },
                                     )
                                 },
                                 supportingContent = {

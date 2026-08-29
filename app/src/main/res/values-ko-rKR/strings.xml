@@ -1428,4 +1428,18 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="setting_files_page_clean_all">모든 파일</string>
   <string name="setting_files_page_clean_older_than_days">%1$d일 이상 지난 파일</string>
   <string name="setting_files_page_clean_range_description">영구적으로 삭제할 파일을 선택하세요. 이 작업은 되돌릴 수 없습니다.</string>
+  <string name="setting_update_group_download">업데이트 다운로드</string>
+  <string name="setting_update_group_message">메시지 알림</string>
+  <string name="setting_update_group_reminder">업데이트 알림</string>
+  <string name="setting_update_mirror_desc">GitHub 직접 연결이 실패할 때 사용됩니다. 비워 두면 직접 연결만 사용합니다.</string>
+  <string name="setting_update_mirror_direct">직접 다운로드（미러 사용 안 함）</string>
+  <string name="setting_update_mirror_title">다운로드 미러</string>
+  <string name="setting_update_reminder_disabled_forever">업데이트 알림이 영구적으로 사용 중지되었습니다</string>
+  <string name="setting_update_reminder_pause_forever">영구</string>
+  <string name="setting_update_source_fork">이 포크（GitHub Releases）</string>
+  <string name="setting_update_source_official">공식 RikkaHub</string>
+  <string name="setting_update_source_title">업데이트 소스</string>
+  <string name="update_card_downloading_via_mirror">직접 연결이 불가능하여 미러로 전환했습니다</string>
+  <string name="update_card_downloading_via_mirror_desc">미러를 통해 다운로드 중...</string>
+  <string name="update_card_recommended_format">%1$s（권장）</string>
 </resources>

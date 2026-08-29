@@ -10,50 +10,62 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import me.rerere.common.http.await
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.BuildConfig
+import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.datastore.UpdateSource
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.util.concurrent.TimeUnit
 
-private const val API_URL = "https://updates.rikka-ai.com/"
+private const val OFFICIAL_API_URL = "https://updates.rikka-ai.com/"
+private const val FORK_API_URL = "https://api.github.com/repos/September-meteor/rikkahub/releases/latest"
+private val FORK_VERSION_PATTERN = Regex("\\d+(\\.\\d+)*")
 
 class UpdateChecker(
     private val client: OkHttpClient,
-    appScope: AppScope,
+    private val appScope: AppScope,
+    private val settingsStore: SettingsStore,
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
-    val updateState: StateFlow<UiState<UpdateInfo>> = checkUpdate().stateIn(
-        scope = appScope,
-        started = SharingStarted.Lazily,
-        initialValue = UiState.Loading,
-    )
+    // 下载前的连通性探测用短超时，避免直连失败时长时间卡顿
+    private val probeClient: OkHttpClient = client.newBuilder()
+        .connectTimeout(3, TimeUnit.SECONDS)
+        .readTimeout(5, TimeUnit.SECONDS)
+        .build()
 
-    private fun checkUpdate(): Flow<UiState<UpdateInfo>> = flow {
+    val updateState: StateFlow<UiState<UpdateInfo>> = settingsStore.settingsFlow
+        .map { it.displaySetting.updateSource }
+        .distinctUntilChanged()
+        .flatMapLatest { source -> checkUpdate(source) }
+        .stateIn(
+            scope = appScope,
+            started = SharingStarted.Lazily,
+            initialValue = UiState.Loading,
+        )
+
+    private fun checkUpdate(source: UpdateSource): Flow<UiState<UpdateInfo>> = flow {
         emit(UiState.Loading)
         emit(
             UiState.Success(
                 data = try {
-                    val response = client.newCall(
-                        Request.Builder()
-                            .url(API_URL)
-                            .get()
-                            .addHeader(
-                                "User-Agent",
-                                "RikkaHub ${BuildConfig.VERSION_NAME} #${BuildConfig.VERSION_CODE}"
-                            )
-                            .build()
-                    ).await()
-                    if (response.isSuccessful) {
-                        json.decodeFromString<UpdateInfo>(response.body.string())
-                    } else {
-                        throw Exception("Failed to fetch update info")
+                    when (source) {
+                        UpdateSource.FORK -> fetchForkUpdate()
+                        UpdateSource.OFFICIAL -> fetchOfficialUpdate()
                     }
                 } catch (e: Exception) {
                     throw Exception("Failed to fetch update info", e)
@@ -64,30 +76,129 @@ class UpdateChecker(
         emit(UiState.Error(it))
     }.flowOn(Dispatchers.IO)
 
-    fun downloadUpdate(context: Context, download: UpdateDownload) {
-        runCatching {
-            val request = DownloadManager.Request(download.url.toUri()).apply {
-                // 设置下载时通知栏的标题和描述
-                setTitle(download.name)
-                setDescription("正在下载更新包...")
-                // 下载完成后通知栏可见
-                setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                // 允许在移动网络和WiFi下下载
-                setAllowedNetworkTypes(DownloadManager.Request.NETWORK_WIFI or DownloadManager.Request.NETWORK_MOBILE)
-                // 设置文件保存路径
-                setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, download.name)
-                // 允许下载的文件类型
-                setMimeType("application/vnd.android.package-archive")
+    private suspend fun fetchOfficialUpdate(): UpdateInfo {
+        val response = client.newCall(
+            Request.Builder()
+                .url(OFFICIAL_API_URL)
+                .get()
+                .addHeader(
+                    "User-Agent",
+                    "RikkaHub ${BuildConfig.VERSION_NAME} #${BuildConfig.VERSION_CODE}"
+                )
+                .build()
+        ).await()
+        if (!response.isSuccessful) {
+            throw Exception("Failed to fetch update info")
+        }
+        return json.decodeFromString<UpdateInfo>(response.body.string())
+    }
+
+    private suspend fun fetchForkUpdate(): UpdateInfo {
+        val response = client.newCall(
+            Request.Builder()
+                .url(FORK_API_URL)
+                .get()
+                .addHeader(
+                    "User-Agent",
+                    "RikkaHub ${BuildConfig.VERSION_NAME} #${BuildConfig.VERSION_CODE}"
+                )
+                .build()
+        ).await()
+        if (!response.isSuccessful) {
+            throw Exception("Failed to fetch update info")
+        }
+        val release = json.decodeFromString<GitHubRelease>(response.body.string())
+        // tag 形如 f-1.4.2，取其数字部分作为 fork 的版本号
+        val version = FORK_VERSION_PATTERN.find(release.tagName)?.value
+            ?: throw Exception("Failed to parse release tag: ${release.tagName}")
+        return UpdateInfo(
+            version = version,
+            publishedAt = release.publishedAt,
+            changelog = release.body,
+            downloads = release.assets.map { asset ->
+                UpdateDownload(
+                    name = asset.name,
+                    url = asset.browserDownloadUrl,
+                    size = formatFileSize(asset.size),
+                )
             }
-            // 获取系统的DownloadManager
-            val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-            dm.enqueue(request)
-            // 你可以保存返回的downloadId到本地，以便后续查询下载进度或状态
-        }.onFailure {
-            Toast.makeText(context, "Failed to update", Toast.LENGTH_SHORT).show()
-            context.openUrl(download.url) // 跳转到下载页面
+        )
+    }
+
+    /**
+     * 判断是否应向用户展示更新卡片
+     *
+     * 官方源：与 BuildConfig.VERSION_NAME（跟随上游）比较；
+     * 本分支源：与 BuildConfig.FORK_VERSION_NAME（fork 自身发布版本，与 release tag 同步）比较。
+     * 因为 fork 的 APK 版本号完全跟随上游，不能用上游版本号判断 fork 是否有更新。
+     */
+    fun shouldShowUpdate(info: UpdateInfo): Boolean {
+        return when (settingsStore.settingsFlow.value.displaySetting.updateSource) {
+            UpdateSource.OFFICIAL -> Version(info.version) > Version(BuildConfig.VERSION_NAME)
+            UpdateSource.FORK -> Version(info.version) > Version(BuildConfig.FORK_VERSION_NAME)
         }
     }
+
+    fun downloadUpdate(context: Context, download: UpdateDownload) {
+        appScope.launch {
+            // 优先直连（内容源最可靠）；直连不通且是 GitHub 链接时，走用户配置的镜像前缀
+            val (targetUrl, viaMirror) = withContext(Dispatchers.IO) {
+                val mirror = settingsStore.settingsFlow.value.displaySetting.updateDownloadMirror
+                when {
+                    isUrlReachable(download.url) -> download.url to false
+                    mirror.isNotBlank() && download.url.contains("github.com") ->
+                        mirror.trimEnd('/') + "/" + download.url to true
+                    else -> download.url to false
+                }
+            }
+            if (viaMirror) {
+                Toast.makeText(context, R.string.update_card_downloading_via_mirror, Toast.LENGTH_SHORT).show()
+            }
+            runCatching {
+                enqueueDownload(context, download, targetUrl, viaMirror)
+            }.onFailure {
+                Toast.makeText(context, R.string.update_card_check_failed, Toast.LENGTH_SHORT).show()
+                context.openUrl(targetUrl) // 跳转到下载页面
+            }
+        }
+    }
+
+    private fun enqueueDownload(context: Context, download: UpdateDownload, url: String, viaMirror: Boolean) {
+        val request = DownloadManager.Request(url.toUri()).apply {
+            // 设置下载时通知栏的标题和描述
+            setTitle(download.name)
+            setDescription(
+                if (viaMirror) {
+                    context.getString(R.string.update_card_downloading_via_mirror_desc)
+                } else {
+                    context.getString(R.string.update_card_downloading)
+                }
+            )
+            // 下载完成后通知栏可见
+            setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+            // 允许在移动网络和WiFi下下载
+            setAllowedNetworkTypes(DownloadManager.Request.NETWORK_WIFI or DownloadManager.Request.NETWORK_MOBILE)
+            // 设置文件保存路径
+            setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, download.name)
+            // 允许下载的文件类型
+            setMimeType("application/vnd.android.package-archive")
+        }
+        // 获取系统的DownloadManager
+        val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+        dm.enqueue(request)
+        // 你可以保存返回的downloadId到本地，以便后续查询下载进度或状态
+    }
+
+    /** 探测 URL 是否可达（短超时 GET 首字节），用于决定直连还是走镜像 */
+    private fun isUrlReachable(url: String): Boolean = runCatching {
+        probeClient.newCall(
+            Request.Builder()
+                .url(url)
+                .header("Range", "bytes=0-0")
+                .get()
+                .build()
+        ).execute().use { it.isSuccessful }
+    }.getOrDefault(false)
 }
 
 @Serializable
@@ -104,6 +215,26 @@ data class UpdateInfo(
     val changelog: String,
     val downloads: List<UpdateDownload>
 )
+
+@Serializable
+data class GitHubRelease(
+    @SerialName("tag_name") val tagName: String,
+    @SerialName("published_at") val publishedAt: String,
+    val body: String,
+    val assets: List<GitHubReleaseAsset>,
+)
+
+@Serializable
+data class GitHubReleaseAsset(
+    val name: String,
+    @SerialName("browser_download_url") val browserDownloadUrl: String,
+    val size: Long,
+)
+
+private fun formatFileSize(size: Long): String {
+    val mb = size / 1024.0 / 1024.0
+    return if (mb >= 1) String.format("%.1f MB", mb) else String.format("%.0f KB", size / 1024.0)
+}
 
 /**
  * 版本号值类，封装版本号字符串并提供比较功能

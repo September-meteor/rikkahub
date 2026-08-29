@@ -14,6 +14,19 @@ plugins {
     alias(libs.plugins.baselineprofile)
 }
 
+// 本分支（fork）的版本号：优先使用 -PforkVersionName=xxx 显式指定（发版/测试时推荐），
+// 否则自动从 git 最近的本分支 tag（f-x.y.z）推导。未打 tag / 非 git 环境时兜底 0.0.0。
+// --match 'f-*' 只匹配本分支 tag，避免 fetch 上游 tags 后把上游版本号（如 v2.4.15）误当成 fork 版本。
+// 注意：versionName/versionCode 完全跟随上游，不能用来标识 fork 的发布版本。
+val forkVersionName: String = providers.gradleProperty("forkVersionName").orElse(
+    providers.exec {
+        commandLine("git", "describe", "--tags", "--match", "f-*", "--abbrev=0")
+        isIgnoreExitValue = true
+    }.standardOutput.asText.map { tag ->
+        Regex("\\d+(\\.\\d+)*").find(tag.trim())?.value ?: "0.0.0"
+    }
+).get()
+
 android {
     namespace = "me.rerere.rikkahub"
     compileSdk = 37
@@ -24,6 +37,8 @@ android {
         targetSdk = 37
         versionCode = 182
         versionName = "2.4.15"
+
+        buildConfigField("String", "FORK_VERSION_NAME", "\"$forkVersionName\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

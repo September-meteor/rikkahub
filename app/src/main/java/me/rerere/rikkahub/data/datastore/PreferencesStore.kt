@@ -636,6 +636,17 @@ enum class ChatFontFamily {
 }
 
 @Serializable
+enum class UpdateSource {
+    @SerialName("fork")
+    FORK,
+    @SerialName("official")
+    OFFICIAL,
+}
+
+// 更新下载默认镜像前缀（GitHub 直连失败时使用，可在设置中自定义；留空表示仅直连）
+const val DEFAULT_UPDATE_MIRROR = "https://ghfast.top/"
+
+@Serializable
 data class DisplaySetting(
     val userAvatar: Avatar = Avatar.Dummy,
     val userNickname: String = "",
@@ -651,6 +662,9 @@ data class DisplaySetting(
     val showThinkingContent: Boolean = true,
     val autoCloseThinking: Boolean = true,
     val updateCheckDisabledUntilEpochMillis: Long = 0L,
+    val updateSource: UpdateSource = UpdateSource.FORK,
+    val updateCheckPermanentlyDisabled: Boolean = false,
+    val updateDownloadMirror: String = DEFAULT_UPDATE_MIRROR,
     val showMessageJumper: Boolean = true,
     val messageJumperOnLeft: Boolean = false,
     val fontSizeRatio: Float = 1.0f,
