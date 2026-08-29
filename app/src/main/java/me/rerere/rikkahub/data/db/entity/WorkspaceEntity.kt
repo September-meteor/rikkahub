@@ -4,9 +4,17 @@ import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import kotlinx.serialization.Serializable
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.workspace.Workspace
 import me.rerere.workspace.WorkspaceShellStatus
+
+/** 「导回原处」同步来源：原始 SAF tree URI + 是否已持久化权限 */
+@Serializable
+data class SyncSourceEntry(
+    val uri: String,
+    val persisted: Boolean,
+)
 
 @Entity(
     tableName = "workspaces",
@@ -37,10 +45,12 @@ data class WorkspaceEntity(
     val enableGitignore: Boolean = true,
     @ColumnInfo("custom_ignore_patterns", defaultValue = "")
     val customIgnorePatterns: String = "",
-    // 「导回原处」：导入目录的原始 SAF tree URI
+    // 「导回原处」：各导入目录的原始 SAF tree URI 与持久化状态
+    // （JSON map: syncRoot -> SyncSourceEntry{uri, persisted}）。
+    // 旧数据为单个 URI 字符串（persisted 存于 source_uri_persisted 列），读取时按旧格式兼容。
     @ColumnInfo("source_tree_uri", defaultValue = "")
     val sourceTreeUri: String = "",
-    // 是否成功持久化 takePersistableUriPermission（卸载重装 / 用户撤销后失效，需重新选择）
+    // 旧字段：仅兼容 v1 单目录数据（single Boolean），新数据统一编码进 source_tree_uri
     @ColumnInfo("source_uri_persisted", defaultValue = "0")
     val sourceUriPersisted: Boolean = false,
     // 「导回原处」同步检查模式（"fast" 快速仅比对尺寸 / "accurate" 完整校验内容）
@@ -52,6 +62,11 @@ data class WorkspaceEntity(
 ) {
     fun toolApprovalOverrides(): Map<String, Boolean> = runCatching {
         JsonInstant.decodeFromString<Map<String, Boolean>>(toolApprovals)
+    }.getOrDefault(emptyMap())
+
+    /** 各导入目录的同步来源（syncRoot -> uri/persisted）；新格式为 JSON map，旧格式单 URI 返回空 */
+    fun syncSources(): Map<String, SyncSourceEntry> = runCatching {
+        JsonInstant.decodeFromString<Map<String, SyncSourceEntry>>(sourceTreeUri)
     }.getOrDefault(emptyMap())
 
     fun toWorkspace(): Workspace = Workspace(

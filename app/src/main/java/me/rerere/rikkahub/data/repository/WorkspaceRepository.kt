@@ -9,6 +9,7 @@ import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.db.dao.WorkspaceDAO
+import me.rerere.rikkahub.data.db.entity.SyncSourceEntry
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.sync.SyncSnapshot
 import me.rerere.rikkahub.utils.JsonInstant
@@ -373,7 +374,7 @@ class WorkspaceRepository(
         dao.upsert(workspace)
     }
 
-    // ---- 「导回原处」同步快照 ----
+    // ---- 「导回原处」同步来源与快照（多目录：每个导入目录各自一份） ----
 
     /** 工作区 FILES 区根目录（内部同步扫描基目录） */
     suspend fun workspaceFilesDir(id: String): File? = withContext(Dispatchers.IO) {
@@ -390,26 +391,59 @@ class WorkspaceRepository(
         }
     }
 
-    /** 读取上次同步快照；不存在或解析失败返回 null */
-    suspend fun readSyncSnapshot(id: String): SyncSnapshot? = withContext(Dispatchers.IO) {
-        val workspace = dao.getById(id) ?: return@withContext null
-        val file = syncSnapshotFile(workspace.root)
-        if (!file.exists()) return@withContext null
-        runCatching {
-            JsonInstant.decodeFromString<SyncSnapshot>(file.readText())
-        }.getOrNull()
+    /** 各导入目录的同步来源（syncRoot -> uri/persisted）；旧单目录数据自动兼容（syncRoot 从旧快照恢复） */
+    suspend fun syncSources(id: String): Map<String, SyncSourceEntry> = withContext(Dispatchers.IO) {
+        val ws = dao.getById(id) ?: return@withContext emptyMap()
+        syncSourcesCompat(ws)
     }
 
-    /** 写入同步快照（存放在工作区私有目录 .rikkahub/sync_snapshot.json，不入库） */
-    suspend fun writeSyncSnapshot(id: String, snapshot: SyncSnapshot): Boolean = withContext(Dispatchers.IO) {
+    /** 某目录的同步来源 URI；未注册返回 null */
+    suspend fun syncSourceUri(id: String, syncRoot: String): String? = withContext(Dispatchers.IO) {
+        syncSources(id)[syncRoot]?.uri
+    }
+
+    /** 注册/更新某目录的同步来源（旧单值数据首次写入时自动升级为 map） */
+    suspend fun registerSyncSource(id: String, syncRoot: String, uri: String, persisted: Boolean) = withContext(Dispatchers.IO) {
+        val ws = dao.getById(id) ?: return@withContext
+        val upgraded = syncSourcesCompat(ws) + (syncRoot to SyncSourceEntry(uri, persisted))
+        dao.upsert(
+            ws.copy(
+                sourceTreeUri = JsonInstant.encodeToString(upgraded),
+                updatedAt = System.currentTimeMillis(),
+            )
+        )
+    }
+
+    /** 工作区已注册同步来源的目录名集合（含旧单文件快照的 syncRoot，保证旧数据同步入口不消失） */
+    suspend fun listSyncRoots(id: String): Set<String> = withContext(Dispatchers.IO) {
+        val ws = dao.getById(id) ?: return@withContext emptySet()
+        val roots = syncSourcesCompat(ws).keys.toMutableSet()
+        legacySnapshotSyncRoot(ws.root)?.let { roots += it }
+        roots
+    }
+
+    /** 读取某目录的同步快照；优先按 syncRoot 分文件，缺失时兼容旧单文件（syncRoot 匹配才用） */
+    suspend fun readSyncSnapshot(id: String, syncRoot: String): SyncSnapshot? = withContext(Dispatchers.IO) {
+        val workspace = dao.getById(id) ?: return@withContext null
+        val file = syncSnapshotFile(workspace.root, syncRoot)
+        if (file.exists()) return@withContext decodeSnapshot(file)
+        val legacy = legacySyncSnapshotFile(workspace.root)
+        if (legacy.exists()) {
+            decodeSnapshot(legacy)?.takeIf { it.syncRoot == syncRoot }?.let { return@withContext it }
+        }
+        null
+    }
+
+    /** 写入某目录的同步快照（按 syncRoot 分文件，存放在工作区私有目录 .rikkahub/，不入库） */
+    suspend fun writeSyncSnapshot(id: String, syncRoot: String, snapshot: SyncSnapshot): Boolean = withContext(Dispatchers.IO) {
         val workspace = dao.getById(id) ?: return@withContext false
         runCatching {
-            val file = syncSnapshotFile(workspace.root)
+            val file = syncSnapshotFile(workspace.root, syncRoot)
             file.parentFile?.mkdirs()
             // 真正原子写入：临时文件 + Files.move(ATOMIC_MOVE, REPLACE_EXISTING)
             // 底层是 rename(2)，不存在「旧文件已删、新文件未落」的中间态；
             // 进程在写入中途被杀也不会留下截断/缺失的快照（快照损坏 → 同步入口消失）
-            val tmp = File(file.parentFile, "sync_snapshot.json.tmp")
+            val tmp = File(file.parentFile, "${file.name}.tmp")
             tmp.writeText(JsonInstant.encodeToString(snapshot))
             try {
                 Files.move(
@@ -425,8 +459,34 @@ class WorkspaceRepository(
         }.isSuccess
     }
 
-    private fun syncSnapshotFile(root: String): File =
+    /** 新格式 map 优先；旧单值数据（单个 URI + 旧 persisted 列）用旧快照 syncRoot 拼成 map */
+    private fun syncSourcesCompat(ws: WorkspaceEntity): Map<String, SyncSourceEntry> {
+        val map = ws.syncSources()
+        if (map.isNotEmpty()) return map
+        val legacyRoot = legacySnapshotSyncRoot(ws.root)
+        if (legacyRoot != null && ws.sourceTreeUri.isNotBlank()) {
+            return mapOf(legacyRoot to SyncSourceEntry(ws.sourceTreeUri, ws.sourceUriPersisted))
+        }
+        return emptyMap()
+    }
+
+    private fun decodeSnapshot(file: File): SyncSnapshot? = runCatching {
+        JsonInstant.decodeFromString<SyncSnapshot>(file.readText())
+    }.getOrNull()
+
+    private fun syncSnapshotFile(root: String, syncRoot: String): File =
+        File(manager.workspaceDir(root), ".rikkahub/sync_snapshot_$syncRoot.json")
+
+    /** 旧单文件快照（v1 单目录格式） */
+    private fun legacySyncSnapshotFile(root: String): File =
         File(manager.workspaceDir(root), ".rikkahub/sync_snapshot.json")
+
+    /** 旧单文件快照的 syncRoot（用于旧数据兼容），无旧快照返回 null */
+    private fun legacySnapshotSyncRoot(root: String): String? {
+        val legacy = legacySyncSnapshotFile(root)
+        if (!legacy.exists()) return null
+        return decodeSnapshot(legacy)?.syncRoot
+    }
 
     companion object {
         private const val TAG = "WorkspaceRepository"

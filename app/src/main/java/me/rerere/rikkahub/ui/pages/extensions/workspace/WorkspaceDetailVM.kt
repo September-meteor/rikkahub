@@ -258,9 +258,8 @@ class WorkspaceDetailVM(
                 val conflictExists = repository.fileExists(id, area, targetPath)
 
                 when {
-                    // 无冲突：无论哪种模式都按现有流程导入（注册同步来源 + 快照）
+                    // 无冲突：无论哪种模式都按现有流程导入（同步来源注册 + 快照由导入完成处统一处理）
                     !conflictExists -> {
-                        registerImportSource(context, treeUri)
                         importTree(context, rootDoc, rootName, destPath, area, rules, registerSnapshot = true)
                     }
 
@@ -286,7 +285,6 @@ class WorkspaceDetailVM(
                             preview = preview,
                             replace = false,
                         )
-                        registerImportSource(context, treeUri)
                         _state.update { it.copy(loading = false, importProgress = null, importPreview = preview) }
                     }
 
@@ -301,7 +299,6 @@ class WorkspaceDetailVM(
                             preview = emptyList(),
                             replace = true,
                         )
-                        registerImportSource(context, treeUri)
                         _state.update {
                             it.copy(
                                 loading = false,
@@ -470,7 +467,7 @@ class WorkspaceDetailVM(
     // ---- 导入辅助 ----
 
     /** 占住 SAF 持久化权限并记录原始目录 URI（「导回原处」依赖）；副本导入不调用 */
-    private suspend fun registerImportSource(context: Context, treeUri: Uri) {
+    private suspend fun registerImportSource(context: Context, treeUri: Uri, rootName: String) {
         val persisted = runCatching {
             context.contentResolver.takePersistableUriPermission(
                 treeUri,
@@ -478,16 +475,8 @@ class WorkspaceDetailVM(
             )
             true
         }.getOrDefault(false)
-        repository.getById(id)?.let { ws ->
-            repository.updateWorkspace(
-                ws.copy(
-                    sourceTreeUri = treeUri.toString(),
-                    sourceUriPersisted = persisted,
-                    updatedAt = System.currentTimeMillis(),
-                )
-            )
-        }
-        // 立即刷新内存态，避免后续 setImportConflictMode 等用旧 workspace 回写库（回退 sourceTreeUri）
+        repository.registerSyncSource(id, rootName, treeUri.toString(), persisted)
+        // 立即刷新内存态，避免后续 setImportConflictMode 等用旧 workspace 回写库（回退同步来源）
         loadWorkspace()
     }
 
@@ -604,15 +593,17 @@ class WorkspaceDetailVM(
             _state.update { it.copy(importProgress = currentTotal to currentTotal) }
         }
 
-        // 导入完成后生成初始快照（相对导入根目录的路径 → 大小/hash + 目录指纹）。
+        // 导入完成后注册同步来源并生成初始快照（相对导入根目录的路径 → 大小/hash + 目录指纹）。
         // 直接复用本次导入的 rules（其 .gitignore key 约定与 scanInternal 完全一致），
         // 保证被排除内容不会进入快照。仅 FILES 区、位于根目录时写入（副本导入不写）。
         if (registerSnapshot && area == WorkspaceStorageArea.FILES && destPath.isBlank()) {
+            registerImportSource(context, rootDoc.uri, destRootName)
             val filesDir = repository.workspaceFilesDir(id)
             if (filesDir != null) {
                 val internal = WorkspaceSyncEngine.scanInternal(filesDir, destRootName, rules)
                 repository.writeSyncSnapshot(
                     id,
+                    destRootName,
                     SyncSnapshot(
                         syncRoot = destRootName,
                         createdAt = System.currentTimeMillis(),
@@ -650,7 +641,7 @@ class WorkspaceDetailVM(
     ): List<SyncPreviewItem> {
         val areaDir = repository.workspaceAreaDir(id, area) ?: error("工作区目录不可用")
         val baseDir = File(areaDir, destPath)
-        val snapshot = repository.readSyncSnapshot(id)?.takeIf { it.syncRoot == rootName }
+        val snapshot = repository.readSyncSnapshot(id, rootName)
 
         val source = WorkspaceSyncEngine.scanExternalFast(
             context = context,
@@ -720,11 +711,13 @@ class WorkspaceDetailVM(
         }
 
         if (area == WorkspaceStorageArea.FILES && destPath.isBlank()) {
+            registerImportSource(context, rootDoc.uri, rootName)
             val filesDir = repository.workspaceFilesDir(id)
             if (filesDir != null) {
                 val internal = WorkspaceSyncEngine.scanInternal(filesDir, rootName, rules)
                 repository.writeSyncSnapshot(
                     id,
+                    rootName,
                     SyncSnapshot(
                         syncRoot = rootName,
                         createdAt = System.currentTimeMillis(),
@@ -791,14 +784,14 @@ class WorkspaceDetailVM(
      * [SyncStageException] 并翻译成用户可读文案；单文件级异常已在引擎内跳过并记录日志，
      * 不会让整个协程崩溃。
      *
-     * 若原始目录权限失效或未导入目录，置 [WorkspaceDetailState.syncSourceLost]，
+     * 若原始目录权限失效或未导入目录，置 [WorkspaceDetailState.syncSourceLostFor]，
      * 由 UI 层引导重新选择目录。
      */
-    fun prepareSyncPreview(context: Context) {
+    fun prepareSyncPreview(context: Context, syncRoot: String) {
         syncJob?.cancel()
         syncJob = viewModelScope.launch(Dispatchers.IO) {
             val workspace = repository.getById(id) ?: return@launch
-            val treeUri = workspace.sourceTreeUri.takeIf { it.isNotBlank() }?.let { Uri.parse(it) }
+            val treeUri = repository.syncSourceUri(id, syncRoot)?.let { Uri.parse(it) }
             val rootDoc = treeUri?.let { DocumentFile.fromTreeUri(context, it) }
             if (rootDoc == null || !rootDoc.canWrite()) {
                 _state.update {
@@ -807,7 +800,7 @@ class WorkspaceDetailVM(
                         syncPreview = null,
                         syncProgress = null,
                         syncError = null,
-                        syncSourceLost = true,
+                        syncSourceLostFor = syncRoot,
                     )
                 }
                 return@launch
@@ -820,7 +813,7 @@ class WorkspaceDetailVM(
                     syncPreview = null,
                     syncProgress = null,
                     syncError = null,
-                    syncSourceLost = false,
+                    syncSourceLostFor = null,
                 )
             }
 
@@ -832,8 +825,7 @@ class WorkspaceDetailVM(
             syncDocCache = docCache
 
             runCatching {
-                val snapshot = repository.readSyncSnapshot(id)
-                val syncRoot = snapshot?.syncRoot ?: (rootDoc.name ?: "imported")
+                val snapshot = repository.readSyncSnapshot(id, syncRoot)
 
                 // ---- 外部扫描 ETA 状态：累计速率 + 每秒 ticker 刷新倒计时 ----
                 val scanStartMs = SystemClock.elapsedRealtime()
@@ -907,12 +899,12 @@ class WorkspaceDetailVM(
             }.onSuccess { result ->
                 _state.update {
                     it.copy(
-                        syncRoot = result.syncRoot,
+                        activeSyncRoot = result.syncRoot,
                         syncPreview = result.preview,
                         syncPhase = SyncPhase.PREVIEW,
                         syncProgress = null,
                         syncError = null,
-                        syncSourceLost = false,
+                        syncSourceLostFor = null,
                     )
                 }
             }.onFailure { error ->
@@ -930,7 +922,7 @@ class WorkspaceDetailVM(
     }
 
     /** 用户确认后真正执行同步写入，完成后更新快照 */
-    fun confirmSync(context: Context) {
+    fun confirmSync(context: Context, syncRoot: String) {
         val preview = state.value.syncPreview ?: return
         if (preview.isEmpty()) {
             _state.update { it.copy(syncPhase = SyncPhase.IDLE, syncPreview = null) }
@@ -939,13 +931,11 @@ class WorkspaceDetailVM(
         syncJob?.cancel()
         syncJob = viewModelScope.launch(Dispatchers.IO) {
             val workspace = repository.getById(id) ?: return@launch
-            val rootDoc = workspace.sourceTreeUri
-                .takeIf { it.isNotBlank() }
-                ?.let { DocumentFile.fromTreeUri(context, Uri.parse(it)) }
+            val rootDoc = repository.syncSourceUri(id, syncRoot)?.let { DocumentFile.fromTreeUri(context, Uri.parse(it)) }
             if (rootDoc == null || !rootDoc.canWrite()) {
                 _state.update {
                     it.copy(
-                        syncSourceLost = true,
+                        syncSourceLostFor = syncRoot,
                         syncPhase = SyncPhase.IDLE,
                         syncPreview = null,
                         syncProgress = null,
@@ -969,8 +959,6 @@ class WorkspaceDetailVM(
                     ?: WorkspaceIgnoreRules(workspace.enableGitignore, workspace.customIgnorePatterns).also {
                         WorkspaceSyncEngine.loadGitignoreTree(context, rootDoc, it, syncDocCache)
                     }
-                val snapshot = repository.readSyncSnapshot(id)
-                val syncRoot = snapshot?.syncRoot ?: (rootDoc.name ?: "imported")
                 val filesDir = repository.workspaceFilesDir(id) ?: error("工作区文件目录不可用")
 
                 val internal = stageCatching(SyncStage.SCAN_INTERNAL) {
@@ -996,6 +984,7 @@ class WorkspaceDetailVM(
                 // 写入完成后，把当前内部状态 A 重新写入快照（含目录指纹，供下次指纹短路）
                 repository.writeSyncSnapshot(
                     id,
+                    syncRoot,
                     SyncSnapshot(
                         syncRoot = syncRoot,
                         createdAt = System.currentTimeMillis(),
@@ -1031,12 +1020,13 @@ class WorkspaceDetailVM(
                 syncPreview = null,
                 syncProgress = null,
                 syncError = null,
+                activeSyncRoot = null,
             )
         }
     }
 
     fun dismissSyncSourceLost() {
-        _state.update { it.copy(syncSourceLost = false) }
+        _state.update { it.copy(syncSourceLostFor = null) }
     }
 
     fun clearSyncError() {
@@ -1101,7 +1091,7 @@ class WorkspaceDetailVM(
     }
 
     /** 权限失效后用户重新选择的目录：占住权限、持久化 URI，并自动生成新预览 */
-    fun onSyncSourcePicked(context: Context, treeUri: Uri) {
+    fun onSyncSourcePicked(context: Context, treeUri: Uri, syncRoot: String) {
         viewModelScope.launch(Dispatchers.IO) {
             val persisted = runCatching {
                 context.contentResolver.takePersistableUriPermission(
@@ -1110,17 +1100,10 @@ class WorkspaceDetailVM(
                 )
                 true
             }.getOrDefault(false)
-            val workspace = repository.getById(id) ?: return@launch
-            repository.updateWorkspace(
-                workspace.copy(
-                    sourceTreeUri = treeUri.toString(),
-                    sourceUriPersisted = persisted,
-                    updatedAt = System.currentTimeMillis(),
-                )
-            )
-            _state.update { it.copy(syncSourceLost = false) }
+            repository.registerSyncSource(id, syncRoot, treeUri.toString(), persisted)
+            _state.update { it.copy(syncSourceLostFor = null) }
             loadWorkspace()
-            prepareSyncPreview(context)
+            prepareSyncPreview(context, syncRoot)
         }
     }
 
@@ -1245,15 +1228,14 @@ class WorkspaceDetailVM(
     private fun loadWorkspace() {
         viewModelScope.launch {
             val workspace = repository.getById(id)
-            _state.update { it.copy(workspace = workspace) }
-            // 加载同步根目录名（用于文件卡片上「同步回原目录」入口的显隐判断）
-            if (workspace != null && workspace.sourceTreeUri.isNotBlank()) {
-                val syncRoot = repository.readSyncSnapshot(id)?.syncRoot
-                    // 快照文件缺失/损坏时自愈：从持久化的来源 URI 恢复根目录名
-                    // （与「导回原处」的 syncRoot 回退一致），保证同步入口不因快照文件丢失而消失
-                    ?: recoverSyncRootFromSource(workspace.sourceTreeUri)
-                _state.update { it.copy(syncRoot = syncRoot) }
+            // 已注册同步来源的目录名集合（用于文件卡片上「同步回原目录」入口的显隐判断）
+            var syncRoots = if (workspace != null) repository.listSyncRoots(id) else emptySet()
+            // 极端兜底：来源 map 与旧快照均无法恢复时，从持久化的来源 URI 恢复根目录名，
+            // 保证同步入口不因快照文件丢失而消失
+            if (syncRoots.isEmpty() && workspace?.sourceTreeUri?.isNotBlank() == true) {
+                recoverSyncRootFromSource(workspace.sourceTreeUri)?.let { syncRoots = setOf(it) }
             }
+            _state.update { it.copy(workspace = workspace, syncRoots = syncRoots) }
         }
     }
 
@@ -1280,10 +1262,14 @@ data class WorkspaceDetailState(
     // 「导回原处」同步状态（显式状态机）
     val syncPhase: SyncPhase = SyncPhase.IDLE,
     val syncPreview: List<SyncPreviewItem>? = null,
-    val syncRoot: String? = null,
+    /** 已注册同步来源的目录名集合（FILES 根目录下这些目录卡片显示「同步回原目录」入口） */
+    val syncRoots: Set<String> = emptySet(),
+    /** 当前同步弹窗针对的目录（SCANNING/PREVIEW/EXECUTING 期间非空） */
+    val activeSyncRoot: String? = null,
     val syncProgress: SyncProgress? = null,
     val syncError: String? = null,
-    val syncSourceLost: Boolean = false,
+    /** 原始目录权限失效的目录名（非空 = 显示重新选择目录弹窗） */
+    val syncSourceLostFor: String? = null,
 )
 
 /** 「导回原处」显式状态机 */

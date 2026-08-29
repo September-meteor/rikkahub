@@ -125,7 +125,7 @@ fun WorkspaceDetailPage(id: String) {
         contract = ActivityResultContracts.OpenDocumentTree(),
     ) { treeUri ->
         if (treeUri == null) return@rememberLauncherForActivityResult
-        vm.onSyncSourcePicked(context, treeUri)
+        state.syncSourceLostFor?.let { vm.onSyncSourcePicked(context, treeUri, it) }
     }
 
     val filePicker = rememberLauncherForActivityResult(
@@ -265,9 +265,9 @@ fun WorkspaceDetailPage(id: String) {
                     onSelectArea = vm::selectArea,
                     onGoUp = vm::goUp,
                     onSyncToSource = { entry ->
-                        // 仅对导入的根目录（与快照中的 syncRoot 同名）提供「导回原处」
-                        if (entry.isDirectory && entry.name == state.syncRoot) {
-                            vm.prepareSyncPreview(context)
+                        // 仅对导入的根目录（已注册同步来源的 syncRoot）提供「导回原处」
+                        if (entry.isDirectory && entry.name in state.syncRoots) {
+                            vm.prepareSyncPreview(context, entry.name)
                         }
                     },
                     onOpen = { entry ->
@@ -386,7 +386,7 @@ fun WorkspaceDetailPage(id: String) {
                 phase = state.syncPhase,
                 preview = state.syncPreview,
                 progress = state.syncProgress,
-                onConfirm = { vm.confirmSync(context) },
+                onConfirm = { state.activeSyncRoot?.let { vm.confirmSync(context, it) } },
                 onCancel = vm::cancelSync,
             )
         }
@@ -395,7 +395,7 @@ fun WorkspaceDetailPage(id: String) {
     }
 
     // 「导回原处」：原始目录权限失效，引导重新选择
-    if (state.syncSourceLost) {
+    if (state.syncSourceLostFor != null) {
         AlertDialog(
             onDismissRequest = vm::dismissSyncSourceLost,
             title = { Text(stringResource(R.string.workspace_detail_sync_source_lost_title)) },
@@ -814,7 +814,7 @@ private fun WorkspaceFilesPage(
             val isSyncRoot = state.area == WorkspaceStorageArea.FILES &&
                 state.path.isBlank() &&
                 entry.isDirectory &&
-                entry.name == state.syncRoot
+                entry.name in state.syncRoots
             WorkspaceFileCard(
                 entry = entry,
                 onOpen = { onOpen(entry) },
