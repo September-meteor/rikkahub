@@ -50,6 +50,7 @@ import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.GenerationChunk
 import me.rerere.rikkahub.data.ai.GenerationHandler
+import me.rerere.rikkahub.data.ai.TranslationHandler
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_REASONING_TRANSLATE_SEPARATOR
 import me.rerere.rikkahub.data.datastore.ReasoningTranslateFallbackMode
 import me.rerere.rikkahub.data.ai.mcp.McpManager
@@ -167,6 +168,7 @@ class ChatService(
     private val conversationRepo: ConversationRepository,
     private val memoryRepository: MemoryRepository,
     private val generationHandler: GenerationHandler,
+    private val translationHandler: TranslationHandler,
     private val templateTransformer: TemplateTransformer,
     private val providerManager: ProviderManager,
     private val localTools: LocalTools,
@@ -1165,7 +1167,7 @@ class ChatService(
                 val loadingText = context.getString(R.string.translating)
                 updateTranslationField(conversationId, message.id, loadingText)
 
-                generationHandler.translateText(
+                translationHandler.translateText(
                     settings = settings,
                     sourceText = messageText,
                     targetLanguage = targetLanguage
@@ -1243,7 +1245,7 @@ class ChatService(
                         val combinedText = reasoningParts.joinToString("\n\n") { it.reasoning }.trim()
                         if (combinedText.isBlank()) return@launch
 
-                        generationHandler.translateText(
+                        translationHandler.translateText(
                             settings = settings,
                             sourceText = combinedText,
                             targetLanguage = targetLanguage,
@@ -1263,7 +1265,7 @@ class ChatService(
                             // 逐条发送：每条独立请求，译文写回对应卡片
                             reasoningParts.forEachIndexed { index, part ->
                                 if (part.reasoning.isBlank()) return@forEachIndexed
-                                generationHandler.translateText(
+                                translationHandler.translateText(
                                     settings = settings,
                                     sourceText = part.reasoning,
                                     targetLanguage = targetLanguage,
@@ -1283,7 +1285,7 @@ class ChatService(
 
                             val buffer = StringBuilder()
 
-                            generationHandler.translateText(
+                            translationHandler.translateText(
                                 settings = settings,
                                 sourceText = combinedText,
                                 targetLanguage = targetLanguage,
