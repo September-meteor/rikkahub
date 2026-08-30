@@ -340,11 +340,27 @@ class ChatService(
             // 新建对话, 并添加预设消息
             val currentSettings = settingsStore.settingsFlowRaw.first()
             val assistant = currentSettings.getCurrentAssistant()
-            val newConversation = Conversation.ofId(
+            var newConversation = Conversation.ofId(
                 id = conversationId,
                 assistantId = assistant.id,
                 newConversation = true
             ).updateCurrentMessages(assistant.presetMessages)
+            // 新会话默认放入该助手「当前选中的文件夹」（持久化记忆）；
+            // 记忆的文件夹已被删除时回退未归类
+            // 文件夹映射内存优先读取：selectFolder 同步更新内存态，避免 DataStore 异步写入竞态；
+            // 冷启动内存未加载（dummy）时回退读取原始 DataStore
+            val folderMap = settingsStore.settingsFlow.value
+                .takeIf { !it.init }
+                ?.selectedFolderIds
+                ?: currentSettings.selectedFolderIds
+            val defaultFolderId = folderMap[assistant.id.toString()]
+                ?.takeIf { it.isNotBlank() }
+                ?.let { runCatching { Uuid.parse(it) }.getOrNull() }
+                // 校验文件夹仍然存在且归属于当前助手，防止跨助手脏数据把会话塞进别的助手的文件夹
+                ?.let { fid -> folderRepository.getFolderById(fid)?.takeIf { it.assistantId == assistant.id }?.id }
+            if (defaultFolderId != null) {
+                newConversation = newConversation.copy(folderId = defaultFolderId)
+            }
             updateConversation(conversationId, newConversation)
         }
     }

@@ -14,6 +14,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import io.pebbletemplates.pebble.PebbleEngine
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.serialization.SerialName
@@ -110,6 +111,9 @@ class SettingsStore(
         val ASSISTANTS = stringPreferencesKey("assistants")
         val ASSISTANT_TAGS = stringPreferencesKey("assistant_tags")
 
+        // 每个助手「新会话默认文件夹」（assistantId -> folderId，未归类不存储）
+        val SELECTED_FOLDERS = stringPreferencesKey("selected_folders")
+
         // 搜索
         val SEARCH_SERVICES = stringPreferencesKey("search_services")
         val SEARCH_COMMON = stringPreferencesKey("search_common")
@@ -202,6 +206,9 @@ class SettingsStore(
                 assistantTags = preferences[ASSISTANT_TAGS]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
+                selectedFolderIds = preferences[SELECTED_FOLDERS]?.let {
+                    runCatching { JsonInstant.decodeFromString<Map<String, String>>(it) }.getOrNull()
+                } ?: emptyMap(),
                 providers = JsonInstant.decodeFromString(preferences[PROVIDERS] ?: "[]"),
                 assistants = JsonInstant.decodeFromString(preferences[ASSISTANTS] ?: "[]"),
                 dynamicColor = preferences[DYNAMIC_COLOR] != false,
@@ -408,6 +415,8 @@ class SettingsStore(
             preferences[ASSISTANTS] = JsonInstant.encodeToString(settings.assistants)
             preferences[SELECT_ASSISTANT] = settings.assistantId.toString()
             preferences[ASSISTANT_TAGS] = JsonInstant.encodeToString(settings.assistantTags)
+            // 注意：SELECTED_FOLDERS 不在此全量写入中，
+            // 由 updateSelectedFolder 用独立原子写入维护，避免被旧快照覆盖
 
             preferences[SEARCH_SERVICES] = JsonInstant.encodeToString(settings.searchServices)
             preferences[SEARCH_COMMON] = JsonInstant.encodeToString(settings.searchCommonOptions)
@@ -453,6 +462,45 @@ class SettingsStore(
     suspend fun updateAssistant(assistantId: Uuid) {
         dataStore.edit { preferences ->
             preferences[SELECT_ASSISTANT] = assistantId.toString()
+        }
+    }
+
+    /**
+     * 记录某个助手「新会话默认文件夹」；folderId 为 null 表示切回未归类（不存储）。
+     *
+     * 先同步更新内存态（settingsFlow），再原子写入独立 DataStore key（SELECTED_FOLDERS）。
+     * 不走全量 update()：否则任何携带旧快照的整对象保存（切助手/改昵称等）都会覆盖该字段。
+     */
+    suspend fun updateSelectedFolder(assistantId: Uuid, folderId: Uuid?) {
+        val memory = settingsFlow.value
+        // 内存尚未加载（dummy）时以原始 DataStore 数据为基底
+        val baseMap = if (memory.init) {
+            settingsFlowRaw.first().selectedFolderIds
+        } else {
+            memory.selectedFolderIds
+        }
+        val newMap = buildMap {
+            putAll(baseMap)
+            if (folderId == null) {
+                remove(assistantId.toString())
+            } else {
+                put(assistantId.toString(), folderId.toString())
+            }
+        }
+        if (!memory.init) {
+            settingsFlow.value = memory.copy(selectedFolderIds = newMap)
+        }
+        dataStore.edit { preferences ->
+            val current = preferences[SELECTED_FOLDERS]?.let {
+                runCatching { JsonInstant.decodeFromString<Map<String, String>>(it) }.getOrNull()
+            } ?: emptyMap()
+            val merged = current.toMutableMap()
+            if (folderId == null) {
+                merged.remove(assistantId.toString())
+            } else {
+                merged[assistantId.toString()] = folderId.toString()
+            }
+            preferences[SELECTED_FOLDERS] = JsonInstant.encodeToString(merged)
         }
     }
 
@@ -577,6 +625,8 @@ data class Settings(
     val providers: List<ProviderSetting> = DEFAULT_PROVIDERS,
     val assistants: List<Assistant> = DEFAULT_ASSISTANTS,
     val assistantTags: List<Tag> = emptyList(),
+    // 每个助手记住的「新会话默认文件夹」（assistantId -> folderId，未归类不存储）
+    val selectedFolderIds: Map<String, String> = emptyMap(),
     val searchServices: List<SearchServiceOptions> = listOf(SearchServiceOptions.DEFAULT),
     val searchCommonOptions: SearchCommonOptions = SearchCommonOptions(),
     val searchServiceSelected: Int = 0,

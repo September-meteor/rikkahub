@@ -256,7 +256,15 @@ fun ChatDrawerContent(
             FolderBar(
                 folders = folders,
                 selectedFolderId = selectedFolderId,
-                onSelect = { drawerVm.selectFolder(it) },
+                onSelect = { folderId ->
+                    drawerVm.selectFolder(folderId)
+                    // 当前对话若是「新创建」（如切换助手时自动创建的对话），
+                    // 让它跟随新选中的文件夹，而不是停留在未分类/旧文件夹；
+                    // 已存在的对话不受影响（浏览文件夹不会误移）
+                    if (current.newConversation) {
+                        drawerVm.moveConversationToFolder(current.id, folderId)
+                    }
+                },
                 onCreate = { showCreateFolderDialog = true },
                 onRename = { folderToRename = it },
                 onDelete = { folderToDelete = it },

@@ -124,13 +124,28 @@ class ChatDrawerVM(
     val scrollOffset: Int get() = savedStateHandle["scrollOffset"] ?: 0
 
     init {
-        // 助手切换时重置文件夹筛选，回到「聊天」视图，
-        // 避免继续显示上一个助手文件夹内的会话（文件夹是助手内分组）
+        // 助手切换时恢复该助手记忆中的文件夹筛选（文件夹是助手内分组），
+        // 若记忆的文件夹已被删除则回退「未归类」视图
         viewModelScope.launch {
-            assistantIdFlow.collect {
-                _selectedFolderId.value = null
+            assistantIdFlow.collect { assistantId ->
+                _selectedFolderId.value = resolvePersistedFolderId(assistantId)
             }
         }
+    }
+
+    /**
+     * 读取该助手持久化的「新会话默认文件夹」，并校验其仍然存在且归属于该助手。
+     * 未设置、文件夹已不存在或属于其他助手时返回 null（未归类视图）。
+     */
+    private suspend fun resolvePersistedFolderId(assistantId: Uuid): Uuid? {
+        val persisted = settingsStore.settingsFlowRaw.first()
+            .selectedFolderIds[assistantId.toString()]
+            ?.takeIf { it.isNotBlank() }
+            ?.let { runCatching { Uuid.parse(it) }.getOrNull() }
+            ?: return null
+        return folderRepo.getFolderById(persisted)
+            ?.takeIf { it.assistantId == assistantId }
+            ?.let { persisted }
     }
 
     fun saveScrollPosition(index: Int, offset: Int) {
@@ -140,6 +155,12 @@ class ChatDrawerVM(
 
     fun selectFolder(folderId: Uuid?) {
         _selectedFolderId.value = folderId
+        viewModelScope.launch {
+            // 助手 ID 从原始 DataStore 读取，避免 settingsFlow 尚未加载（dummy）时
+            // 把文件夹记录到错误的助手键下
+            val assistantId = settingsStore.settingsFlowRaw.first().assistantId
+            settingsStore.updateSelectedFolder(assistantId, folderId)
+        }
     }
 
     fun createFolder(name: String) {
@@ -171,6 +192,8 @@ class ChatDrawerVM(
             chatService.deleteFolder(folderId)
             if (_selectedFolderId.value == folderId) {
                 _selectedFolderId.value = null
+                val assistantId = assistantIdFlow.first()
+                settingsStore.updateSelectedFolder(assistantId, null)
             }
         }
         return true
