@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -52,7 +51,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -832,11 +830,6 @@ private fun WorkspaceFilesPage(
                 } else {
                     null
                 },
-                isSyncRoot = isSyncRoot,
-                // 仅执行写入阶段在卡片顶部显示细进度线
-                syncProgress = state.syncProgress
-                    ?.takeIf { it.stage == SyncProgressStage.EXECUTE }
-                    ?.let { it.done to it.total },
             )
         }
     }
@@ -900,8 +893,6 @@ private fun WorkspaceFileCard(
     onExport: () -> Unit,
     onShare: () -> Unit,
     onSyncToSource: (() -> Unit)? = null,
-    isSyncRoot: Boolean = false,
-    syncProgress: Pair<Int, Int>? = null,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
@@ -911,26 +902,12 @@ private fun WorkspaceFileCard(
             .clickable(onClick = onOpen),
         colors = CustomColors.cardColorsOnSurfaceContainer,
     ) {
-        Box {
-            // 「导回原处」同步进度：仅同步根目录卡片顶部显示一条 2dp 细线（零布局偏移）
-            if (isSyncRoot && syncProgress != null) {
-                val (done, total) = syncProgress
-                LinearProgressIndicator(
-                    progress = { if (total > 0) done.toFloat() / total else 0f },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(2.dp)
-                        .align(Alignment.TopCenter),
-                    color = MaterialTheme.colorScheme.primary,
-                    trackColor = Color.Transparent,
-                )
-            }
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Icon(
                 imageVector = if (entry.isDirectory) HugeIcons.Folder01 else HugeIcons.File02,
                 contentDescription = null,
@@ -1027,7 +1004,6 @@ private fun WorkspaceFileCard(
                         },
                     )
                 }
-            }
             }
         }
     }
