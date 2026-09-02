@@ -37,6 +37,11 @@ class SkillsVM(
         }
     }
 
+    /** 重新从磁盘加载技能列表（在详情页修复 SKILL.md 返回后调用，刷新损坏状态） */
+    fun refresh() {
+        loadSkills()
+    }
+
     fun saveSkill(name: String, content: String, onResult: (Boolean) -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
             val result = skillManager.saveSkill(name, content)

@@ -62,6 +62,7 @@ import com.composables.icons.lucide.FolderOpen
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Trash2
+import com.dokar.sonner.ToastType
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.context.LocalToaster
@@ -135,6 +136,8 @@ fun SkillDetailPage(skillName: String) {
         // 编辑状态：TextFieldState 由页面持有，异步加载文件内容后写入（避免主线程读盘卡顿）
         val editState = remember(skillFile.relativePath) { TextFieldState() }
         var contentLoading by remember(skillFile.relativePath) { mutableStateOf(true) }
+        // 格式错误提示：保存后仍无法启用时保持弹窗打开，在编辑框下方红字标出问题位置
+        var formatError by remember(skillFile.relativePath) { mutableStateOf<String?>(null) }
         LaunchedEffect(skillFile.relativePath) {
             contentLoading = true
             editState.setTextAndPlaceCursorAtEnd(vm.readFile(skillFile))
@@ -144,11 +147,17 @@ fun SkillDetailPage(skillName: String) {
             skillFile = skillFile,
             state = editState,
             loading = contentLoading,
+            errorText = formatError,
             onDismiss = { editingFile = null },
             onConfirm = { content ->
-                vm.saveFile(skillFile.relativePath, content) { error ->
-                    if (error == null) editingFile = null
-                    else toaster.show(error)
+                vm.saveFile(skillFile.relativePath, content) { error, warning ->
+                    if (error != null) {
+                        toaster.show(error)
+                    } else if (warning != null) {
+                        formatError = warning
+                    } else {
+                        editingFile = null
+                    }
                 }
             },
         )
@@ -158,9 +167,13 @@ fun SkillDetailPage(skillName: String) {
         AddFileDialog(
             onDismiss = { showAddDialog = false },
             onConfirm = { fileName, content ->
-                vm.saveFile(fileName, content) { error ->
-                    if (error == null) showAddDialog = false
-                    else toaster.show(error)
+                vm.saveFile(fileName, content) { error, warning ->
+                    if (error != null) {
+                        toaster.show(error)
+                    } else {
+                        showAddDialog = false
+                        if (warning != null) toaster.show(warning, type = ToastType.Warning)
+                    }
                 }
             },
         )
@@ -329,6 +342,7 @@ private fun EditFileDialog(
     skillFile: SkillFile,
     state: TextFieldState,
     loading: Boolean,
+    errorText: String?,
     onDismiss: () -> Unit,
     onConfirm: (content: String) -> Unit,
 ) {
@@ -351,6 +365,15 @@ private fun EditFileDialog(
                     label = { Text(stringResource(R.string.skill_detail_page_content)) },
                     lineLimits = TextFieldLineLimits.MultiLine(minHeightInLines = 10, maxHeightInLines = 20),
                     textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                    isError = errorText != null,
+                    supportingText = {
+                        if (errorText != null) {
+                            Text(
+                                text = errorText,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth(),
                 )
             }

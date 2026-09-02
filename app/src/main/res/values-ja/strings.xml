@@ -1038,6 +1038,13 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="skill_detail_page_create">作成</string>
   <string name="skill_detail_page_delete_confirm">ファイル"%s"を削除してもよろしいですか？</string>
   <string name="skill_detail_page_delete_failed">削除に失敗しました</string>
+  <string name="skill_detail_page_invalid_colon_hint">%1$d 行目：「%2$s:」のコロン後にスペースがありません</string>
+  <string name="skill_detail_page_invalid_yaml_line">%1$d 行目付近の frontmatter の形式が誤っています</string>
+  <string name="skill_detail_page_invalid_missing_name">name フィールドがありません</string>
+<string name="skill_detail_page_invalid_missing_description">description フィールドがありません</string>
+  <string name="skill_detail_page_invalid_generic">frontmatter の形式が誤っています。確認してください</string>
+  <string name="skill_detail_page_rename_forbidden">スキル名の変更はできません（name フィールドは「%1$s」にしてください）</string>
+  <string name="skill_detail_page_save_failed">保存に失敗しました</string>
   <string name="skill_detail_page_delete_file">ファイルを削除</string>
   <string name="skill_detail_page_file_name">ファイル名</string>
   <string name="skill_detail_page_file_name_invalid">無効なファイル名</string>
@@ -1151,6 +1158,8 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_page_preferences_experimental_desc">変更または削除される可能性がある実験的な機能</string>
   <string name="skills_page_import_from_file">ファイルからインポート</string>
   <string name="skills_page_add_manually">手動追加</string>
+  <string name="skills_page_broken_badge">スキル形式エラー</string>
+  <string name="skills_page_broken_hint">SKILL.md の形式エラーです。修正すると有効化できます</string>
   <string name="setting_model_page_tab_model">モデル</string>
   <string name="setting_model_page_tab_prompt">プロンプト</string>
   <string name="setting_model_page_prompt_translation">翻訳</string>

@@ -1082,6 +1082,13 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="skill_detail_page_create">创建</string>
   <string name="skill_detail_page_delete_confirm">确定要删除文件“%s”吗？</string>
   <string name="skill_detail_page_delete_failed">删除失败</string>
+  <string name="skill_detail_page_invalid_colon_hint">第 %1$d 行“%2$s:”后缺少空格</string>
+  <string name="skill_detail_page_invalid_yaml_line">第 %1$d 行附近 frontmatter 格式有误</string>
+  <string name="skill_detail_page_invalid_missing_name">缺少 name 字段</string>
+<string name="skill_detail_page_invalid_missing_description">缺少 description 字段</string>
+  <string name="skill_detail_page_invalid_generic">frontmatter 格式有误，请检查</string>
+  <string name="skill_detail_page_rename_forbidden">不允许修改技能名称（name 字段必须为“%1$s”）</string>
+  <string name="skill_detail_page_save_failed">保存失败</string>
   <string name="skill_detail_page_delete_file">删除文件</string>
   <string name="skill_detail_page_file_name">文件名</string>
   <string name="skill_detail_page_file_name_invalid">无效的文件名</string>
@@ -1191,6 +1198,8 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_page_preferences_experimental_desc">可能变更或移除的实验性功能</string>
   <string name="skills_page_import_from_file">从文件导入</string>
   <string name="skills_page_add_manually">手动添加</string>
+  <string name="skills_page_broken_badge">技能格式错误</string>
+  <string name="skills_page_broken_hint">SKILL.md 格式错误，修复后可启用</string>
   <string name="setting_model_page_tab_model">模型</string>
   <string name="setting_model_page_tab_prompt">提示词</string>
   <string name="setting_model_page_prompt_translation">翻译</string>

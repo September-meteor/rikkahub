@@ -1038,6 +1038,13 @@
   <string name="skill_detail_page_create">Создать</string>
   <string name="skill_detail_page_delete_confirm">Вы уверены, что хотите удалить файл "%s"?</string>
   <string name="skill_detail_page_delete_failed">Не удалось удалить</string>
+  <string name="skill_detail_page_invalid_colon_hint">Строка %1$d: после «%2$s:» отсутствует пробел</string>
+  <string name="skill_detail_page_invalid_yaml_line">Ошибка формата frontmatter около строки %1$d</string>
+  <string name="skill_detail_page_invalid_missing_name">Отсутствует поле name</string>
+<string name="skill_detail_page_invalid_missing_description">Отсутствует поле description</string>
+  <string name="skill_detail_page_invalid_generic">Неверный формат frontmatter, проверьте его</string>
+  <string name="skill_detail_page_rename_forbidden">Переименование навыка не поддерживается (поле name должно быть «%1$s»)</string>
+  <string name="skill_detail_page_save_failed">Не удалось сохранить</string>
   <string name="skill_detail_page_delete_file">Удалить файл</string>
   <string name="skill_detail_page_file_name">Имя файла</string>
   <string name="skill_detail_page_file_name_invalid">Неверное имя файла</string>
@@ -1151,6 +1158,8 @@
   <string name="setting_page_preferences_experimental_desc">Экспериментальные функции, которые могут быть изменены или удалены</string>
   <string name="skills_page_import_from_file">Импортировать из файла</string>
   <string name="skills_page_add_manually">Добавить вручную</string>
+  <string name="skills_page_broken_badge">Ошибка формата навыка</string>
+  <string name="skills_page_broken_hint">Ошибка формата SKILL.md. Исправьте файл, чтобы включить навык</string>
   <string name="setting_model_page_tab_model">Модель</string>
   <string name="setting_model_page_tab_prompt">Промпты</string>
   <string name="setting_model_page_prompt_translation">Перевод</string>

@@ -1036,6 +1036,13 @@
   <string name="skill_detail_page_create">建立</string>
   <string name="skill_detail_page_delete_confirm">確定要刪除檔案「%s」嗎？</string>
   <string name="skill_detail_page_delete_failed">刪除失敗</string>
+  <string name="skill_detail_page_invalid_colon_hint">第 %1$d 行「%2$s:」後缺少空格</string>
+  <string name="skill_detail_page_invalid_yaml_line">第 %1$d 行附近 frontmatter 格式有誤</string>
+  <string name="skill_detail_page_invalid_missing_name">缺少 name 欄位</string>
+<string name="skill_detail_page_invalid_missing_description">缺少 description 欄位</string>
+  <string name="skill_detail_page_invalid_generic">frontmatter 格式有誤，請檢查</string>
+  <string name="skill_detail_page_rename_forbidden">不允許修改技能名稱（name 欄位必須為「%1$s」）</string>
+  <string name="skill_detail_page_save_failed">儲存失敗</string>
   <string name="skill_detail_page_delete_file">刪除檔案</string>
   <string name="skill_detail_page_file_name">檔案名稱</string>
   <string name="skill_detail_page_file_name_invalid">檔案名稱無效</string>
@@ -1149,6 +1156,8 @@
   <string name="setting_page_preferences_experimental_desc">可能變更或移除的實驗性功能</string>
   <string name="skills_page_import_from_file">從檔案匯入</string>
   <string name="skills_page_add_manually">手動新增</string>
+  <string name="skills_page_broken_badge">技能格式錯誤</string>
+  <string name="skills_page_broken_hint">SKILL.md 格式錯誤，修正後即可啟用</string>
   <string name="setting_model_page_tab_model">模型</string>
   <string name="setting_model_page_tab_prompt">提示詞</string>
   <string name="setting_model_page_prompt_translation">翻譯</string>

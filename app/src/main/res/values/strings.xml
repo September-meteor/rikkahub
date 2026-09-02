@@ -1116,6 +1116,13 @@
   <string name="skill_detail_page_create">Create</string>
   <string name="skill_detail_page_delete_confirm">Are you sure you want to delete file "%s"?</string>
   <string name="skill_detail_page_delete_failed">Delete failed</string>
+  <string name="skill_detail_page_invalid_colon_hint">Line %1$d: missing space after "%2$s:"</string>
+  <string name="skill_detail_page_invalid_yaml_line">Invalid frontmatter near line %1$d</string>
+  <string name="skill_detail_page_invalid_missing_name">Missing name field</string>
+<string name="skill_detail_page_invalid_missing_description">Missing description field</string>
+  <string name="skill_detail_page_invalid_generic">Invalid frontmatter, please check it</string>
+  <string name="skill_detail_page_rename_forbidden">Renaming a skill is not supported (the name field must be \"%1$s\")</string>
+  <string name="skill_detail_page_save_failed">Save failed</string>
   <string name="skill_detail_page_delete_file">Delete File</string>
   <string name="skill_detail_page_file_name">File Name</string>
   <string name="skill_detail_page_file_name_invalid">Invalid file name</string>
@@ -1211,6 +1218,8 @@
   <string name="setting_theme_page_delete_theme_message">Are you sure you want to delete this theme?</string>
   <string name="skills_page_import_from_file">Import from File</string>
   <string name="skills_page_add_manually">Add manually</string>
+  <string name="skills_page_broken_badge">Invalid Skill</string>
+  <string name="skills_page_broken_hint">SKILL.md format error; fix the file to enable this Skill</string>
   <string name="setting_model_page_tab_model">Model</string>
   <string name="setting_model_page_tab_prompt">Prompts</string>
   <string name="setting_model_page_prompt_translation">Translation</string>

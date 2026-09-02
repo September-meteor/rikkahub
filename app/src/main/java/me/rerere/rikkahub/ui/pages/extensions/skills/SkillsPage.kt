@@ -35,6 +35,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,10 +50,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.rikkahub.R
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.Alert01
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Download01
 import me.rerere.hugeicons.stroke.FileImport
@@ -65,6 +68,7 @@ import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
+import me.rerere.rikkahub.ui.hooks.rememberAppLifecycleState
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
@@ -81,6 +85,20 @@ fun SkillsPage() {
     var showAddDialog by rememberSaveable { mutableStateOf(false) }
     var showImportDialog by rememberSaveable { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<SkillMetadata?>(null) }
+
+    // 从详情页（修复 SKILL.md / 删除文件）返回时重新加载列表，
+    // 使损坏状态与卡片描述保持最新。
+    // 覆盖两种导航行为：页面被销毁后重建（LaunchedEffect 重跑），
+    // 或页面保留在组合中仅生命周期变化（RESUMED 时重跑）。
+    LaunchedEffect(Unit) {
+        vm.refresh()
+    }
+    val lifecycleState by rememberAppLifecycleState()
+    LaunchedEffect(lifecycleState) {
+        if (lifecycleState == Lifecycle.State.RESUMED) {
+            vm.refresh()
+        }
+    }
     val fileImportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -264,27 +282,51 @@ private fun SkillCard(
                 Text(
                     text = skill.name,
                     style = MaterialTheme.typography.titleSmallEmphasized,
+                    color = if (skill.broken) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                 )
-                Text(
-                    text = skill.description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                )
-                if (!skill.compatibility.isNullOrBlank()) {
+                if (skill.broken) {
+                    // 格式错误：展示修复引导文案，点击卡片进入详情修复 SKILL.md
                     Text(
-                        text = skill.compatibility,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.tertiary,
+                        text = stringResource(R.string.skills_page_broken_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        maxLines = 2,
                     )
+                } else {
+                    Text(
+                        text = skill.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                    )
+                    if (!skill.compatibility.isNullOrBlank()) {
+                        Text(
+                            text = skill.compatibility,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.tertiary,
+                        )
+                    }
                 }
             }
             Box {
-                IconButton(onClick = { menuExpanded = true }) {
-                    Icon(
-                        imageVector = HugeIcons.MoreVertical,
-                        contentDescription = stringResource(R.string.skills_page_more_actions),
-                    )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    // 右上角红色警告符号：标识 SKILL.md 格式错误，修复前无法开启
+                    if (skill.broken) {
+                        Icon(
+                            imageVector = HugeIcons.Alert01,
+                            contentDescription = stringResource(R.string.skills_page_broken_badge),
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                    IconButton(onClick = { menuExpanded = true }) {
+                        Icon(
+                            imageVector = HugeIcons.MoreVertical,
+                            contentDescription = stringResource(R.string.skills_page_more_actions),
+                        )
+                    }
                 }
                 DropdownMenu(
                     expanded = menuExpanded,

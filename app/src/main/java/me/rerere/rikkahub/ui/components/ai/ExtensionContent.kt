@@ -3,10 +3,12 @@ package me.rerere.rikkahub.ui.components.ai
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Icon
@@ -25,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import com.composables.icons.lucide.ExternalLink
 import com.composables.icons.lucide.Lucide
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Alert01
 import me.rerere.hugeicons.stroke.Link01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.files.SkillMetadata
@@ -123,8 +126,29 @@ fun SkillsContent(
     ) {
         items(skills, key = { it.skillDir.absolutePath }) { skill ->
             ListItem(
-                headlineContent = { Text(skill.name) },
-                supportingContent = if (skill.description.isNotBlank()) {
+                headlineContent = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(skill.name)
+                        if (skill.broken) {
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(
+                                imageVector = HugeIcons.Alert01,
+                                contentDescription = stringResource(R.string.skills_page_broken_badge),
+                                modifier = Modifier.size(14.dp),
+                                tint = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                    }
+                },
+                supportingContent = if (skill.broken) {
+                    {
+                        Text(
+                            text = stringResource(R.string.skills_page_broken_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                } else if (skill.description.isNotBlank()) {
                     {
                         Text(
                             text = skill.description,
@@ -134,9 +158,11 @@ fun SkillsContent(
                     }
                 } else null,
                 trailingContent = {
+                    // 格式错误：修复前禁止开启
                     Switch(
-                        checked = enabledSkills.contains(skill.name),
-                        onCheckedChange = { checked -> onToggle(skill.name, checked) }
+                        checked = !skill.broken && enabledSkills.contains(skill.name),
+                        onCheckedChange = { checked -> onToggle(skill.name, checked) },
+                        enabled = !skill.broken,
                     )
                 },
                 colors = ListItemDefaults.colors(containerColor = Color.Transparent),

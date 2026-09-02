@@ -52,7 +52,8 @@ class SkillManager(
             return null
         }
         val skillDir = resolveSkillDir(name) ?: return null
-        return parseSkillFile(skillDir.resolve("SKILL.md"), skillDir)
+        // 保存的内容格式不合法（如缺 description）视为保存失败，避免产生"坏"技能
+        return parseSkillFile(skillDir.resolve("SKILL.md"), skillDir).takeIf { !it.broken }
     }
 
     suspend fun deleteSkill(name: String): Boolean = withContext(Dispatchers.IO) {
@@ -186,21 +187,67 @@ class SkillManager(
         return null
     }
 
-    private fun parseSkillFile(skillFile: File, skillDir: File): SkillMetadata? {
+    private fun parseSkillFile(skillFile: File, skillDir: File): SkillMetadata {
         return runCatching {
             val content = skillFile.readText()
             val frontmatter = SkillFrontmatterParser.parse(content)
-            val name = frontmatter["name"]?.takeIf { it.isNotBlank() } ?: return null
-            val description = frontmatter["description"]?.takeIf { it.isNotBlank() } ?: return null
+            val name = frontmatter["name"]?.takeIf { it.isNotBlank() }
+            val description = frontmatter["description"]?.takeIf { it.isNotBlank() }
+            // 顶层存在冒号后缺空格的键（如 description:"..."），SnakeYAML 会静默解析成垃圾键值对，
+            // 必须独立检出；此为该文件的根本问题，优先于按字段缺失判定
+            val colonIssues = SkillFrontmatterParser.findMissingSpaceLines(content)
+            when {
+                colonIssues.isNotEmpty() -> SkillMetadata(
+                    name = name ?: skillDir.name,
+                    description = description ?: "",
+                    skillDir = skillDir,
+                    broken = true,
+                    errorReason = "missing_colon_space",
+                )
+
+                // frontmatter 缺失或无法解析（name/description 同时缺失）
+                name == null && description == null -> SkillMetadata(
+                    name = skillDir.name,
+                    description = "",
+                    skillDir = skillDir,
+                    broken = true,
+                    errorReason = "invalid_frontmatter",
+                )
+
+                // 缺 name：只能以目录名兜底标识，修复时需补上 name 字段
+                name == null -> SkillMetadata(
+                    name = skillDir.name,
+                    description = description!!,
+                    skillDir = skillDir,
+                    broken = true,
+                    errorReason = "missing_name",
+                )
+
+                // 缺 description：name 仍可正常显示与匹配 enabledSkills
+                description == null -> SkillMetadata(
+                    name = name,
+                    description = "",
+                    skillDir = skillDir,
+                    broken = true,
+                    errorReason = "missing_description",
+                )
+
+                else -> SkillMetadata(
+                    name = name,
+                    description = description,
+                    compatibility = frontmatter["compatibility"],
+                    skillDir = skillDir,
+                )
+            }
+        }.getOrElse { e ->
+            Log.w(TAG, "parseSkillFile: Failed to parse ${skillFile.absolutePath}", e)
             SkillMetadata(
-                name = name,
-                description = description,
-                compatibility = frontmatter["compatibility"],
+                name = skillDir.name,
+                description = "",
                 skillDir = skillDir,
+                broken = true,
+                errorReason = "read_failed",
             )
-        }.getOrElse {
-            Log.w(TAG, "parseSkillFile: Failed to parse ${skillFile.absolutePath}", it)
-            null
         }
     }
 }
@@ -210,6 +257,10 @@ data class SkillMetadata(
     val description: String,
     val compatibility: String? = null,
     val skillDir: File,
+    /** true = SKILL.md 存在但格式错误（缺 name/description、frontmatter 解析失败等），当前无法作为技能使用 */
+    val broken: Boolean = false,
+    /** [broken] 时的原因码：missing_colon_space / invalid_frontmatter / missing_name / missing_description / read_failed */
+    val errorReason: String? = null,
 ) {
     val skillFile: File get() = skillDir.resolve("SKILL.md")
 }
