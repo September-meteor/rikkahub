@@ -159,7 +159,7 @@ fun TextArea(
             OutlinedTextField(
                 state = state,
                 modifier = Modifier
-                    .fillMaxWidth(),
+                .fillMaxWidth(),
                 placeholder = if (placeholder.isNotEmpty()) {
                     { Text(placeholder) }
                 } else null,
@@ -191,9 +191,8 @@ private fun FullScreenTextEditor(
     placeholder: String,
     onDismiss: () -> Unit
 ) {
-    var editingText by remember(state.text.toString()) {
-        mutableStateOf(state.text.toString())
-    }
+    // 打开全屏编辑器时快照一次当前文本；后续以本地编辑态为准（原 remember(state.text) 键会在每次输入时重置状态）
+    var editingText by remember { mutableStateOf(state.text.toString()) }
 
     BasicAlertDialog(
         onDismissRequest = onDismiss,
@@ -232,8 +231,8 @@ private fun FullScreenTextEditor(
                         value = editingText,
                         onValueChange = { editingText = it },
                         modifier = Modifier
-                            .imePadding()
-                            .fillMaxSize(),
+                        .imePadding()
+                        .fillMaxSize(),
                         shape = RoundedCornerShape(16.dp),
                         placeholder = if (placeholder.isNotEmpty()) {
                             { Text(placeholder) }

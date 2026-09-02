@@ -56,6 +56,8 @@ import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.ui.CardGroup
+import me.rerere.rikkahub.ui.components.ui.ManagedTextField
+import me.rerere.rikkahub.ui.components.ui.rememberSyncedTextFieldState
 import me.rerere.rikkahub.utils.insertAtCursor
 import java.util.Locale
 
@@ -537,42 +539,32 @@ private fun TimeRangesInput(
     onUpdate: (List<TimeRange>) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // rememberSaveable：LazyColumn item 回收重建后仍保留输入内容（不打断输入）
-    var text by rememberSaveable { mutableStateOf(formatTimeRangesInput(ranges)) }
-    var showError by rememberSaveable { mutableStateOf(false) }
+    // 新版 TextFieldState API：输入以 state 为准，配对符号/光标稳定；失焦才校验格式
+    val invalidTimeError = stringResource(R.string.setting_provider_page_price_slot_invalid_time)
+    val timeRangesState = rememberTextFieldState(initialText = formatTimeRangesInput(ranges))
 
-    OutlinedTextField(
-        value = text,
-        onValueChange = { value ->
-            // 限制长度（多个时间段输入，60 字符足够）
-            if (value.length > 60) return@OutlinedTextField
-            text = value
-            val parsed = parseTimeRangesInput(value)
-            if (parsed != null) {
-                onUpdate(parsed)
-            }
-            // 输入过程中不提示错误，等失焦再校验
-        },
-        modifier = modifier.onFocusChanged { focusState ->
-            if (!focusState.isFocused) {
-                // 失焦时校验：仅当有内容且格式非法才提示
-                val trimmed = text.trim()
-                showError = trimmed.isNotEmpty() && parseTimeRangesInput(trimmed) == null
-            } else {
-                showError = false
-            }
-        },
+    ManagedTextField(
+        state = timeRangesState,
+        modifier = modifier,
         label = { Text(stringResource(R.string.setting_provider_page_price_slot_time_ranges)) },
         placeholder = { Text(stringResource(R.string.setting_provider_page_price_slot_time_placeholder)) },
-        supportingText = if (showError) {
-            { Text(stringResource(R.string.setting_provider_page_price_slot_invalid_time)) }
-        } else {
-            null
-        },
-        isError = showError,
         // 固定两行：输入内容换行也保持高度稳定（与「自定义排除模式」输入框一致）
-        minLines = 2,
-        maxLines = 2,
+        lineLimits = TextFieldLineLimits.MultiLine(minHeightInLines = 2, maxHeightInLines = 2),
+        persistDebounceMs = 250,
+        onPersist = { value ->
+            // 输入过程中不提示错误，合法则写入模型（长度>60 解析自然失败，静默跳过）
+            if (value.length <= 60) {
+                parseTimeRangesInput(value)?.let(onUpdate)
+            }
+        },
+        validateOnBlur = { text ->
+            val trimmed = text.trim()
+            if (trimmed.isNotEmpty() && parseTimeRangesInput(trimmed) == null) {
+                invalidTimeError
+            } else {
+                null
+            }
+        },
     )
 }
 
@@ -584,41 +576,32 @@ private fun PriceInput(
     onUpdate: (String?, String?, String?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // rememberSaveable：LazyColumn item 回收重建后仍保留输入内容
-    // 初始为空（不预填逗号）
-    var text by rememberSaveable { mutableStateOf(formatPriceInput(inputPrice, cachedInputPrice, outputPrice)) }
-    var showError by rememberSaveable { mutableStateOf(false) }
+    // 新版 TextFieldState API：可正常输入逗号与配对符号；失焦才校验
+    val invalidPriceError = stringResource(R.string.setting_provider_page_price_slot_invalid_price)
+    val priceState = rememberTextFieldState(initialText = formatPriceInput(inputPrice, cachedInputPrice, outputPrice))
 
-    OutlinedTextField(
-        value = text,
-        onValueChange = { value: String ->
-            // 限制长度（三个价格逗号分隔，40 字符足够）
-            if (value.length > 40) return@OutlinedTextField
-            text = value
-            val parsed = parsePriceString(value)
-            if (parsed != null) {
-                onUpdate(parsed.first, parsed.second, parsed.third)
-            }
-            // 输入过程中不提示错误，等失焦再校验
-        },
-        modifier = modifier.onFocusChanged { focusState ->
-            if (!focusState.isFocused) {
-                val trimmed = text.trim()
-                showError = trimmed.isNotEmpty() && parsePriceString(trimmed) == null
-            } else {
-                showError = false
-            }
-        },
+    ManagedTextField(
+        state = priceState,
+        modifier = modifier,
         label = { Text(stringResource(R.string.setting_provider_page_price_slot_price)) },
         placeholder = { Text(stringResource(R.string.setting_provider_page_price_slot_price_placeholder)) },
-        supportingText = if (showError) {
-            { Text(stringResource(R.string.setting_provider_page_price_slot_invalid_price)) }
-        } else {
-            null
-        },
-        isError = showError,
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        persistDebounceMs = 250,
+        onPersist = { value ->
+            // 输入过程中不提示错误，合法则写入模型（>40 字符解析自然失败，静默跳过）
+            if (value.length <= 40) {
+                parsePriceString(value)?.let { onUpdate(it.first, it.second, it.third) }
+            }
+        },
+        validateOnBlur = { text ->
+            val trimmed = text.trim()
+            if (trimmed.isNotEmpty() && parsePriceString(trimmed) == null) {
+                invalidPriceError
+            } else {
+                null
+            }
+        },
     )
 }
 
@@ -628,20 +611,14 @@ private fun UnitInput(
     onUpdate: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var text by rememberSaveable { mutableStateOf(unit) }
-
-    OutlinedTextField(
-        value = text,
-        onValueChange = { value ->
-            // 限制长度（单位短语，20 字符足够）
-            if (value.length > 20) return@OutlinedTextField
-            text = value
-            onUpdate(value)
-        },
+    ManagedTextField(
+        state = rememberSyncedTextFieldState(unit),
         label = { Text(stringResource(R.string.setting_provider_page_price_slot_unit)) },
         placeholder = { Text(stringResource(R.string.setting_provider_page_price_slot_unit_placeholder)) },
         singleLine = true,
         modifier = modifier,
+        persistDebounceMs = 250,
+        onPersist = { value -> if (value.length <= 20) onUpdate(value) },
     )
 }
 

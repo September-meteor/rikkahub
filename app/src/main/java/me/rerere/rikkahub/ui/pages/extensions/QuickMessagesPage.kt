@@ -48,6 +48,12 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
+
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.rememberTextFieldState
+
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
@@ -272,21 +278,27 @@ private fun EditQuickMessageDialog(
         title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                val titleState = rememberTextFieldState(initialText = quickMessageTitle)
+                val contentState = rememberTextFieldState(initialText = quickMessageContent)
                 OutlinedTextField(
-                    value = quickMessageTitle,
-                    onValueChange = { quickMessageTitle = it },
+                    state = titleState,
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text(stringResource(R.string.assistant_page_quick_message_title)) },
-                    singleLine = true,
+                    lineLimits = TextFieldLineLimits.SingleLine,
                 )
                 OutlinedTextField(
-                    value = quickMessageContent,
-                    onValueChange = { quickMessageContent = it },
+                    state = contentState,
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text(stringResource(R.string.assistant_page_quick_message_content)) },
-                    minLines = 4,
-                    maxLines = 8,
+                    lineLimits = TextFieldLineLimits.MultiLine(minHeightInLines = 4, maxHeightInLines = 8),
                 )
+                LaunchedEffect(Unit) {
+                    snapshotFlow { titleState.text.toString() to contentState.text.toString() }
+                        .collect { (t, c) ->
+                            quickMessageTitle = t
+                            quickMessageContent = c
+                        }
+                }
             }
         },
         confirmButton = {

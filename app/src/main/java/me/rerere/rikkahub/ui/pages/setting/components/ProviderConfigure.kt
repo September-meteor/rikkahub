@@ -6,11 +6,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -28,6 +28,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import me.rerere.rikkahub.ui.components.ui.MultilineSecretField
+import me.rerere.rikkahub.ui.components.ui.ManagedTextField
 import com.dokar.sonner.ToastType
 import me.rerere.ai.provider.ClaudePromptCacheTtl
 import me.rerere.ai.provider.ProviderSetting
@@ -207,43 +209,52 @@ private fun ProviderConfigureOpenAI(
 
     provider.description()
 
-    OutlinedTextField(
-        value = provider.name,
-        onValueChange = { onEdit(provider.copy(name = it.trim())) },
+    val nameState = rememberTextFieldState(initialText = provider.name)
+    ManagedTextField(
+        state = nameState,
         label = { Text(stringResource(R.string.setting_provider_page_name)) },
         modifier = Modifier.fillMaxWidth(),
+        persistDebounceMs = 300,
+        onPersist = { onEdit(provider.copy(name = it.trim())) },
+        normalizeOnBlur = { it.trim() },
     )
 
     var keyVisible by remember { mutableStateOf(false) }
-    OutlinedTextField(
+    MultilineSecretField(
         value = provider.apiKey,
-        onValueChange = { onEdit(provider.copy(apiKey = it.trim())) },
-        label = { Text(stringResource(R.string.setting_provider_page_api_key)) },
         modifier = Modifier.fillMaxWidth(),
-        maxLines = 3,
+        label = { Text(stringResource(R.string.setting_provider_page_api_key)) },
         visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
         trailingIcon = {
             IconButton(onClick = { keyVisible = !keyVisible }) {
                 Icon(if (keyVisible) HugeIcons.ViewOff else HugeIcons.View, contentDescription = null)
             }
         },
+        onPersist = { onEdit(provider.copy(apiKey = it.trim())) },
+        normalizeOnBlur = { it.trim() },
     )
 
-    OutlinedTextField(
-        value = provider.baseUrl,
-        onValueChange = { onEdit(provider.copy(baseUrl = it.trim())) },
+    val baseUrlState = rememberTextFieldState(initialText = provider.baseUrl)
+    ManagedTextField(
+        state = baseUrlState,
         label = { Text(stringResource(R.string.setting_provider_page_api_base_url)) },
         modifier = Modifier.fillMaxWidth(),
-        isError = provider.baseUrl.isNotBlank() && !provider.baseUrl.isValidBaseUrl(),
+        isError = baseUrlState.text.isNotBlank() && !baseUrlState.text.toString().isValidBaseUrl(),
+        persistDebounceMs = 300,
+        onPersist = { onEdit(provider.copy(baseUrl = it.trim())) },
+        normalizeOnBlur = { it.trim() },
     )
 
     if (!provider.useResponseApi) {
-        OutlinedTextField(
-            value = provider.chatCompletionsPath,
-            onValueChange = { onEdit(provider.copy(chatCompletionsPath = it.trim())) },
+        val chatCompletionsPathState = rememberTextFieldState(initialText = provider.chatCompletionsPath)
+        ManagedTextField(
+            state = chatCompletionsPathState,
             label = { Text(stringResource(R.string.setting_provider_page_api_path)) },
             modifier = Modifier.fillMaxWidth(),
             enabled = !provider.builtIn,
+            persistDebounceMs = 300,
+            onPersist = { onEdit(provider.copy(chatCompletionsPath = it.trim())) },
+            normalizeOnBlur = { it.trim() },
         )
     }
 
@@ -297,35 +308,40 @@ private fun ProviderConfigureClaude(
 ) {
     provider.description()
 
-    OutlinedTextField(
-        value = provider.name,
-        onValueChange = { onEdit(provider.copy(name = it.trim())) },
+    val nameState = rememberTextFieldState(initialText = provider.name)
+    ManagedTextField(
+        state = nameState,
         label = { Text(stringResource(R.string.setting_provider_page_name)) },
         modifier = Modifier.fillMaxWidth(),
-        maxLines = 3,
+        persistDebounceMs = 300,
+        onPersist = { onEdit(provider.copy(name = it.trim())) },
+        normalizeOnBlur = { it.trim() },
     )
 
     var keyVisible by remember { mutableStateOf(false) }
-    OutlinedTextField(
+    MultilineSecretField(
         value = provider.apiKey,
-        onValueChange = { onEdit(provider.copy(apiKey = it.trim())) },
-        label = { Text(stringResource(R.string.setting_provider_page_api_key)) },
         modifier = Modifier.fillMaxWidth(),
-        maxLines = 3,
+        label = { Text(stringResource(R.string.setting_provider_page_api_key)) },
         visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
         trailingIcon = {
             IconButton(onClick = { keyVisible = !keyVisible }) {
                 Icon(if (keyVisible) HugeIcons.ViewOff else HugeIcons.View, contentDescription = null)
             }
         },
+        onPersist = { onEdit(provider.copy(apiKey = it.trim())) },
+        normalizeOnBlur = { it.trim() },
     )
 
-    OutlinedTextField(
-        value = provider.baseUrl,
-        onValueChange = { onEdit(provider.copy(baseUrl = it.trim())) },
+    val baseUrlState = rememberTextFieldState(initialText = provider.baseUrl)
+    ManagedTextField(
+        state = baseUrlState,
         label = { Text(stringResource(R.string.setting_provider_page_api_base_url)) },
         modifier = Modifier.fillMaxWidth(),
-        isError = provider.baseUrl.isNotBlank() && !provider.baseUrl.isValidBaseUrl(),
+        isError = baseUrlState.text.isNotBlank() && !baseUrlState.text.toString().isValidBaseUrl(),
+        persistDebounceMs = 300,
+        onPersist = { onEdit(provider.copy(baseUrl = it.trim())) },
+        normalizeOnBlur = { it.trim() },
     )
 
     Row(
@@ -409,42 +425,48 @@ private fun ProviderConfigureGoogle(
 
     provider.description()
 
-    OutlinedTextField(
-        value = provider.name,
-        onValueChange = { onEdit(provider.copy(name = it.trim())) },
+    val nameState = rememberTextFieldState(initialText = provider.name)
+    ManagedTextField(
+        state = nameState,
         label = { Text(stringResource(R.string.setting_provider_page_name)) },
         modifier = Modifier.fillMaxWidth(),
+        persistDebounceMs = 300,
+        onPersist = { onEdit(provider.copy(name = it.trim())) },
+        normalizeOnBlur = { it.trim() },
     )
 
     if (!(provider.vertexAI && provider.useServiceAccount)) {
         var keyVisible by remember { mutableStateOf(false) }
-        OutlinedTextField(
+        MultilineSecretField(
             value = provider.apiKey,
-            onValueChange = { onEdit(provider.copy(apiKey = it.trim())) },
-            label = { Text(stringResource(R.string.setting_provider_page_api_key)) },
             modifier = Modifier.fillMaxWidth(),
-            maxLines = 3,
+            label = { Text(stringResource(R.string.setting_provider_page_api_key)) },
             visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
             trailingIcon = {
                 IconButton(onClick = { keyVisible = !keyVisible }) {
                     Icon(if (keyVisible) HugeIcons.ViewOff else HugeIcons.View, contentDescription = null)
                 }
             },
+            onPersist = { onEdit(provider.copy(apiKey = it.trim())) },
+            normalizeOnBlur = { it.trim() },
         )
     }
 
     if (!provider.vertexAI) {
-        OutlinedTextField(
-            value = provider.baseUrl,
-            onValueChange = { onEdit(provider.copy(baseUrl = it.trim())) },
+        val baseUrlState = rememberTextFieldState(initialText = provider.baseUrl)
+        ManagedTextField(
+            state = baseUrlState,
             label = { Text(stringResource(R.string.setting_provider_page_api_base_url)) },
             modifier = Modifier.fillMaxWidth(),
-            isError = provider.baseUrl.isNotBlank() && (
-                !provider.baseUrl.isValidBaseUrl() || !provider.baseUrl.endsWith("/v1beta")
-                ),
-            supportingText = if (!provider.baseUrl.endsWith("/v1beta")) {
+            isError = baseUrlState.text.isNotBlank() && (
+                !baseUrlState.text.toString().isValidBaseUrl() || !baseUrlState.text.toString().endsWith("/v1beta")
+            ),
+            supportingText = if (!baseUrlState.text.toString().endsWith("/v1beta")) {
                 { Text("The base URL usually ends with `/v1beta`") }
             } else null,
+            persistDebounceMs = 300,
+            onPersist = { onEdit(provider.copy(baseUrl = it)) },
+            normalizeOnBlur = { it.trim() },
         )
     }
 
@@ -494,42 +516,50 @@ private fun ProviderConfigureGoogle(
             Text(stringResource(R.string.setting_provider_page_import_service_account_json))
         }
 
-        OutlinedTextField(
-            value = provider.serviceAccountEmail,
-            onValueChange = { onEdit(provider.copy(serviceAccountEmail = it.trim())) },
+        val serviceAccountEmailState = rememberTextFieldState(initialText = provider.serviceAccountEmail)
+        ManagedTextField(
+            state = serviceAccountEmailState,
             label = { Text(stringResource(R.string.setting_provider_page_service_account_email)) },
             modifier = Modifier.fillMaxWidth(),
+            persistDebounceMs = 300,
+            onPersist = { onEdit(provider.copy(serviceAccountEmail = it.trim())) },
+            normalizeOnBlur = { it.trim() },
         )
 
         var privateKeyVisible by remember { mutableStateOf(false) }
-        OutlinedTextField(
+        MultilineSecretField(
             value = provider.privateKey,
-            onValueChange = { onEdit(provider.copy(privateKey = it.trim())) },
-            label = { Text(stringResource(R.string.setting_provider_page_private_key)) },
             modifier = Modifier.fillMaxWidth(),
-            maxLines = 6,
-            minLines = 3,
             textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = JetbrainsMono),
+            label = { Text(stringResource(R.string.setting_provider_page_private_key)) },
             visualTransformation = if (privateKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
             trailingIcon = {
                 IconButton(onClick = { privateKeyVisible = !privateKeyVisible }) {
                     Icon(if (privateKeyVisible) HugeIcons.ViewOff else HugeIcons.View, contentDescription = null)
                 }
             },
+            onPersist = { onEdit(provider.copy(privateKey = it.trim())) },
+            normalizeOnBlur = { it.trim() },
         )
 
-        OutlinedTextField(
-            value = provider.location,
-            onValueChange = { onEdit(provider.copy(location = it.trim())) },
+        val locationState = rememberTextFieldState(initialText = provider.location)
+        ManagedTextField(
+            state = locationState,
             label = { Text(stringResource(R.string.setting_provider_page_location)) },
             modifier = Modifier.fillMaxWidth(),
+            persistDebounceMs = 300,
+            onPersist = { onEdit(provider.copy(location = it.trim())) },
+            normalizeOnBlur = { it.trim() },
         )
 
-        OutlinedTextField(
-            value = provider.projectId,
-            onValueChange = { onEdit(provider.copy(projectId = it.trim())) },
+        val projectIdState = rememberTextFieldState(initialText = provider.projectId)
+        ManagedTextField(
+            state = projectIdState,
             label = { Text(stringResource(R.string.setting_provider_page_project_id)) },
             modifier = Modifier.fillMaxWidth(),
+            persistDebounceMs = 300,
+            onPersist = { onEdit(provider.copy(projectId = it.trim())) },
+            normalizeOnBlur = { it.trim() },
         )
     }
 }

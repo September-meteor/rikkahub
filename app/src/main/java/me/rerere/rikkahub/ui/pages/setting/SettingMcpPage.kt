@@ -25,6 +25,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.input.TextObfuscationMode
+import androidx.compose.foundation.text.input.rememberTextFieldState
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -58,6 +61,7 @@ import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
@@ -71,8 +75,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
@@ -102,6 +104,8 @@ import me.rerere.rikkahub.data.ai.mcp.McpStatus
 import me.rerere.rikkahub.data.ai.mcp.McpTool
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FormItem
+import me.rerere.rikkahub.ui.components.ui.ManagedTextField
+import me.rerere.rikkahub.ui.components.ui.rememberSyncedTextFieldState
 import me.rerere.rikkahub.ui.components.ui.Switch
 import me.rerere.rikkahub.ui.components.ui.SwitchSize
 import me.rerere.rikkahub.ui.components.ui.Tag
@@ -584,10 +588,19 @@ private fun McpCommonOptionsConfigure(
                 Text(stringResource(R.string.setting_mcp_page_name_desc))
             }
         ) {
-            val nameInvalid = !isValidMcpName(config.commonOptions.name)
-            OutlinedTextField(
-                value = config.commonOptions.name,
-                onValueChange = { name ->
+            val mcpNameState = rememberSyncedTextFieldState(config.commonOptions.name)
+            val nameInvalid = !isValidMcpName(mcpNameState.text.toString())
+            ManagedTextField(
+                state = mcpNameState,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(stringResource(R.string.setting_mcp_page_name)) },
+                placeholder = { Text(stringResource(R.string.setting_mcp_page_name_placeholder)) },
+                isError = nameInvalid,
+                supportingText = if (nameInvalid) {
+                    { Text(stringResource(R.string.setting_mcp_page_name_invalid)) }
+                } else null,
+                persistDebounceMs = 250,
+                onPersist = { name ->
                     update(
                         when (config) {
                             is McpServerConfig.SseTransportServer -> config.copy(
@@ -600,13 +613,7 @@ private fun McpCommonOptionsConfigure(
                         }
                     )
                 },
-                label = { Text(stringResource(R.string.setting_mcp_page_name)) },
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text(stringResource(R.string.setting_mcp_page_name_placeholder)) },
-                isError = nameInvalid,
-                supportingText = if (nameInvalid) {
-                    { Text(stringResource(R.string.setting_mcp_page_name_invalid)) }
-                } else null
+                normalizeOnBlur = { it.trim() },
             )
         }
 
@@ -686,21 +693,16 @@ private fun McpCommonOptionsConfigure(
                 )
             }
         ) {
-            OutlinedTextField(
-                value = when (config) {
+            val mcpUrlState = rememberSyncedTextFieldState(
+                when (config) {
                     is McpServerConfig.SseTransportServer -> config.url
                     is McpServerConfig.StreamableHTTPServer -> config.url
-                },
-                onValueChange = { url ->
-                    update(
-                        when (config) {
-                            is McpServerConfig.SseTransportServer -> config.copy(url = url)
-                            is McpServerConfig.StreamableHTTPServer -> config.copy(url = url)
-                        }
-                    )
-                },
-                label = { Text(stringResource(R.string.setting_mcp_page_url_label)) },
+                }
+            )
+            ManagedTextField(
+                state = mcpUrlState,
                 modifier = Modifier.fillMaxWidth(),
+                label = { Text(stringResource(R.string.setting_mcp_page_url_label)) },
                 placeholder = {
                     Text(
                         when (config) {
@@ -708,7 +710,17 @@ private fun McpCommonOptionsConfigure(
                             is McpServerConfig.StreamableHTTPServer -> stringResource(R.string.setting_mcp_page_streamable_http_url_placeholder)
                         }
                     )
-                }
+                },
+                persistDebounceMs = 250,
+                onPersist = { url ->
+                    update(
+                        when (config) {
+                            is McpServerConfig.SseTransportServer -> config.copy(url = url)
+                            is McpServerConfig.StreamableHTTPServer -> config.copy(url = url)
+                        }
+                    )
+                },
+                normalizeOnBlur = { it.trim() },
             )
         }
 
@@ -727,23 +739,30 @@ private fun McpCommonOptionsConfigure(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 config.commonOptions.headers.forEachIndexed { index, header ->
-                    var headerName by remember(header.first) { mutableStateOf(header.first) }
-                    var headerValue by remember(header.second) { mutableStateOf(header.second) }
                     var headerValueVisible by rememberSaveable { mutableStateOf(false) }
+                    // 名称用 TextFieldState（新 API）；值字段需密码掩码（visualTransformation），用旧 API 草稿 DraftTextField
+                    val headerNameState = rememberTextFieldState(initialText = header.first)
+                    LaunchedEffect(config.commonOptions.headers.size, index) {
+                        if (headerNameState.text.toString() != header.first) {
+                            headerNameState.setTextAndPlaceCursorAtEnd(header.first)
+                        }
+                    }
 
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            OutlinedTextField(
-                                value = headerName,
-                                onValueChange = {
-                                    headerName = it
+                            ManagedTextField(
+                                state = headerNameState,
+                                modifier = Modifier.fillMaxWidth(),
+                                label = { Text(stringResource(R.string.setting_mcp_page_header_name)) },
+                                placeholder = { Text(stringResource(R.string.setting_mcp_page_header_name_placeholder)) },
+                                persistDebounceMs = 300,
+                                onPersist = { name ->
                                     val updatedHeaders =
-                                        config.commonOptions.headers.toMutableList()
-                                    updatedHeaders[index] =
-                                        it.trim() to updatedHeaders[index].second
+                                    config.commonOptions.headers.toMutableList()
+                                    updatedHeaders[index] = name to updatedHeaders[index].second
                                     update(
                                         when (config) {
                                             is McpServerConfig.SseTransportServer -> config.copy(
@@ -756,33 +775,13 @@ private fun McpCommonOptionsConfigure(
                                         }
                                     )
                                 },
-                                label = { Text(stringResource(R.string.setting_mcp_page_header_name)) },
-                                modifier = Modifier.fillMaxWidth(),
-                                placeholder = { Text(stringResource(R.string.setting_mcp_page_header_name_placeholder)) }
+                                normalizeOnBlur = { it.trim() },
                             )
                             Spacer(Modifier.height(8.dp))
-                            OutlinedTextField(
-                                value = headerValue,
-                                onValueChange = {
-                                    headerValue = it
-                                    val updatedHeaders =
-                                        config.commonOptions.headers.toMutableList()
-                                    updatedHeaders[index] = updatedHeaders[index].first to it.trim()
-                                    update(
-                                        when (config) {
-                                            is McpServerConfig.SseTransportServer -> config.copy(
-                                                commonOptions = config.commonOptions.copy(headers = updatedHeaders)
-                                            )
-
-                                            is McpServerConfig.StreamableHTTPServer -> config.copy(
-                                                commonOptions = config.commonOptions.copy(headers = updatedHeaders)
-                                            )
-                                        }
-                                    )
-                                },
-                                label = { Text(stringResource(R.string.setting_mcp_page_header_value)) },
+                            ManagedTextField(
+                                state = rememberSyncedTextFieldState(header.second),
                                 modifier = Modifier.fillMaxWidth(),
-                                visualTransformation = if (headerValueVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                                label = { Text(stringResource(R.string.setting_mcp_page_header_value)) },
                                 trailingIcon = {
                                     IconButton(onClick = { headerValueVisible = !headerValueVisible }) {
                                         Icon(
@@ -791,7 +790,26 @@ private fun McpCommonOptionsConfigure(
                                         )
                                     }
                                 },
-                                placeholder = { Text(stringResource(R.string.setting_mcp_page_header_value_placeholder)) }
+                                placeholder = { Text(stringResource(R.string.setting_mcp_page_header_value_placeholder)) },
+                                textObfuscationMode = if (headerValueVisible) TextObfuscationMode.Visible else TextObfuscationMode.Hidden,
+                                persistDebounceMs = 300,
+                                onPersist = { value ->
+                                    val updatedHeaders =
+                                    config.commonOptions.headers.toMutableList()
+                                    updatedHeaders[index] = updatedHeaders[index].first to value
+                                    update(
+                                        when (config) {
+                                            is McpServerConfig.SseTransportServer -> config.copy(
+                                                commonOptions = config.commonOptions.copy(headers = updatedHeaders)
+                                            )
+
+                                            is McpServerConfig.StreamableHTTPServer -> config.copy(
+                                                commonOptions = config.commonOptions.copy(headers = updatedHeaders)
+                                            )
+                                        }
+                                    )
+                                },
+                                normalizeOnBlur = { it.trim() },
                             )
                         }
                         IconButton(onClick = {
@@ -1067,8 +1085,8 @@ private fun McpImportModal(
                     errorMessage = null
                 },
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
+                .fillMaxWidth()
+                .weight(1f),
                 placeholder = { Text("{ \"mcpServers\": { ... } }") },
                 isError = errorMessage != null,
                 supportingText = errorMessage?.let { msg -> { Text(msg, color = MaterialTheme.colorScheme.error) } }

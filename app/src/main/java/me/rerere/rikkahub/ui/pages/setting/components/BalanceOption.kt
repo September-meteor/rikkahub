@@ -31,6 +31,8 @@ import me.rerere.ai.provider.BalanceOption
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.common.http.isJsonExprValid
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.ui.components.ui.ManagedTextField
+import me.rerere.rikkahub.ui.components.ui.rememberSyncedTextFieldState
 import me.rerere.rikkahub.data.datastore.DEFAULT_PROVIDERS
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 
@@ -83,21 +85,24 @@ fun SettingProviderBalanceOption(
             Column(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                OutlinedTextField(
-                    value = balanceOption.apiPath,
-                    onValueChange = { onEdit(balanceOption.copy(apiPath = it)) },
+                val apiPathState = rememberSyncedTextFieldState(balanceOption.apiPath)
+                ManagedTextField(
+                    state = apiPathState,
                     label = { Text(stringResource(R.string.setting_provider_page_balance_api_path)) },
-                    isError = !balanceOption.apiPath.matches(ApiPathRegex),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = balanceOption.resultPath,
-                    onValueChange = { onEdit(balanceOption.copy(resultPath = it)) },
-                    label = { Text(stringResource(R.string.setting_provider_page_balance_json_key)) },
-                    isError = !isJsonExprValid(balanceOption.resultPath),
+                    isError = apiPathState.text.isNotBlank() && !apiPathState.text.toString().matches(ApiPathRegex),
                     modifier = Modifier.fillMaxWidth(),
-                    textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = JetbrainsMono)
+                    persistDebounceMs = 250,
+                    onPersist = { onEdit(balanceOption.copy(apiPath = it)) },
                 )
+                                val resultPathState = rememberSyncedTextFieldState(balanceOption.resultPath)
+                                ManagedTextField(
+                                    state = resultPathState,
+                                    label = { Text(stringResource(R.string.setting_provider_page_balance_json_key)) },
+                                    isError = resultPathState.text.isNotBlank() && !isJsonExprValid(resultPathState.text.toString()),
+                                    modifier = Modifier.fillMaxWidth(),
+                                    persistDebounceMs = 250,
+                                    onPersist = { onEdit(balanceOption.copy(resultPath = it)) },
+                                )
                 IconButton(
                     onClick = {
                         val defaultProvider = DEFAULT_PROVIDERS.find { it.id == provider.id }

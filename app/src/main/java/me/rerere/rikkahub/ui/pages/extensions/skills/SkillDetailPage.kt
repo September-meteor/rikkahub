@@ -7,6 +7,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -16,8 +17,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -127,9 +132,18 @@ fun SkillDetailPage(skillName: String) {
     }
 
     editingFile?.let { skillFile ->
+        // 编辑状态：TextFieldState 由页面持有，异步加载文件内容后写入（避免主线程读盘卡顿）
+        val editState = remember(skillFile.relativePath) { TextFieldState() }
+        var contentLoading by remember(skillFile.relativePath) { mutableStateOf(true) }
+        LaunchedEffect(skillFile.relativePath) {
+            contentLoading = true
+            editState.setTextAndPlaceCursorAtEnd(vm.readFile(skillFile))
+            contentLoading = false
+        }
         EditFileDialog(
             skillFile = skillFile,
-            initialContent = remember(skillFile.relativePath) { vm.readFile(skillFile) },
+            state = editState,
+            loading = contentLoading,
             onDismiss = { editingFile = null },
             onConfirm = { content ->
                 vm.saveFile(skillFile.relativePath, content) { error ->
@@ -313,31 +327,42 @@ private fun DirItem(
 @Composable
 private fun EditFileDialog(
     skillFile: SkillFile,
-    initialContent: String,
+    state: TextFieldState,
+    loading: Boolean,
     onDismiss: () -> Unit,
     onConfirm: (content: String) -> Unit,
 ) {
-    var content by rememberSaveable(skillFile.relativePath) { mutableStateOf(initialContent) }
-
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(skillFile.relativePath, fontFamily = FontFamily.Monospace) },
         text = {
-            OutlinedTextField(
-                value = content,
-                onValueChange = { content = it },
-                label = { Text(stringResource(R.string.skill_detail_page_content)) },
-                minLines = 10,
-                maxLines = 20,
-                textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                modifier = Modifier.fillMaxWidth(),
-            )
+            if (loading) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 32.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator()
+                }
+            } else {
+                OutlinedTextField(
+                    state = state,
+                    label = { Text(stringResource(R.string.skill_detail_page_content)) },
+                    lineLimits = TextFieldLineLimits.MultiLine(minHeightInLines = 10, maxHeightInLines = 20),
+                    textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(content) }) { Text(stringResource(R.string.skill_detail_page_save)) }
+            TextButton(
+                onClick = { onConfirm(state.text.toString()) },
+                enabled = !loading,
+            ) { Text(stringResource(R.string.skill_detail_page_save)) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+            TextButton(onClick = onDismiss, enabled = !loading) { Text(stringResource(R.string.cancel)) }
         },
     )
 }

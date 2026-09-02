@@ -66,6 +66,8 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FormItem
+import me.rerere.rikkahub.ui.components.ui.ManagedTextField
+import me.rerere.rikkahub.ui.components.ui.rememberSyncedTextFieldState
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
@@ -159,8 +161,8 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
                 placeholder = { Text(stringResource(R.string.assistant_page_search_placeholder)) },
                 leadingIcon = {
                     Icon(HugeIcons.Search01, contentDescription = null)
@@ -348,14 +350,18 @@ private fun AssistantCreationSheet(
                             Text(stringResource(R.string.assistant_page_name))
                         },
                     ) {
-                        OutlinedTextField(
-                            value = assistant.name, onValueChange = {
+                        ManagedTextField(
+                            state = rememberSyncedTextFieldState(assistant.name),
+                            modifier = Modifier.fillMaxWidth(),
+                            persistDebounceMs = 250,
+                            onPersist = {
                                 update(
                                     assistant.copy(
                                         name = it
                                     )
                                 )
-                            }, modifier = Modifier.fillMaxWidth()
+                            },
+                            normalizeOnBlur = { it.trim() },
                         )
                     }
 

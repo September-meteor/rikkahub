@@ -53,6 +53,7 @@ import androidx.compose.material3.MultiChoiceSegmentedButtonRow
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedCard
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SecondaryTabRow
@@ -114,6 +115,7 @@ import me.rerere.rikkahub.ui.components.ui.SiliconFlowPowerByIcon
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
 import me.rerere.rikkahub.ui.components.ui.rememberShareSheetState
+import me.rerere.rikkahub.ui.components.ui.ManagedTextField
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.hooks.useEditState
@@ -567,35 +569,41 @@ private fun ModelSettingsForm(
                             .padding(vertical = 16.dp)
                             .verticalScroll(rememberScrollState())
                     ) {
-                        OutlinedTextField(
-                            value = model.modelId,
-                            onValueChange = {
-                                if (!isEdit) {
-                                    setModelId(it.trim())
-                                }
-                            },
-                            label = { Text(stringResource(R.string.setting_provider_page_model_id)) },
+                        val modelIdState = rememberTextFieldState(initialText = model.modelId)
+                        ManagedTextField(
+                            state = modelIdState,
                             modifier = Modifier.fillMaxWidth(),
+                            label = { Text(stringResource(R.string.setting_provider_page_model_id)) },
                             placeholder = {
                                 if (!isEdit) {
                                     Text(stringResource(R.string.setting_provider_page_model_id_placeholder))
                                 }
                             },
-                            enabled = !isEdit
+                            enabled = !isEdit,
+                            persistDebounceMs = 300,
+                            onPersist = {
+                                if (!isEdit) {
+                                    setModelId(it)
+                                }
+                            },
+                            normalizeOnBlur = { it.trim() },
                         )
 
-                        OutlinedTextField(
-                            value = model.displayName,
-                            onValueChange = {
-                                onModelChange(model.copy(displayName = it.trim()))
-                            },
-                            label = { Text(stringResource(if (isEdit) R.string.setting_provider_page_model_name else R.string.setting_provider_page_model_display_name)) },
+                        val displayNameState = rememberTextFieldState(initialText = model.displayName)
+                        ManagedTextField(
+                            state = displayNameState,
                             modifier = Modifier.fillMaxWidth(),
+                            label = { Text(stringResource(if (isEdit) R.string.setting_provider_page_model_name else R.string.setting_provider_page_model_display_name)) },
                             placeholder = {
                                 if (!isEdit) {
                                     Text(stringResource(R.string.setting_provider_page_model_display_name_placeholder))
                                 }
-                            }
+                            },
+                            persistDebounceMs = 300,
+                            onPersist = {
+                                onModelChange(model.copy(displayName = it))
+                            },
+                            normalizeOnBlur = { it.trim() },
                         )
 
                         ModelTypeSelector(

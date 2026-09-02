@@ -25,7 +25,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.text.input.rememberTextFieldState
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -88,6 +90,8 @@ import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.ui.components.message.ChatMessage
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FormItem
+import me.rerere.rikkahub.ui.components.ui.ManagedTextField
+import me.rerere.rikkahub.ui.components.ui.rememberSyncedTextFieldState
 import me.rerere.rikkahub.ui.components.ui.Select
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TextArea
@@ -287,19 +291,12 @@ private fun AssistantPromptContent(
                     }
                 },
                 content = {
-                    val missingMessage = "{{ message }}" !in assistant.messageTemplate
-                    OutlinedTextField(
-                        value = assistant.messageTemplate,
-                        onValueChange = {
-                            onUpdate(
-                                assistant.copy(
-                                    messageTemplate = it
-                                )
-                            )
-                        },
+                    val templateState = rememberSyncedTextFieldState(assistant.messageTemplate)
+                    val missingMessage = "{{ message }}" !in templateState.text
+                    ManagedTextField(
+                        state = templateState,
                         modifier = Modifier.fillMaxWidth(),
-                        minLines = 5,
-                        maxLines = 15,
+                        lineLimits = TextFieldLineLimits.MultiLine(minHeightInLines = 5, maxHeightInLines = 15),
                         isError = missingMessage,
                         supportingText = if (missingMessage) {
                             { Text(stringResource(R.string.assistant_page_message_template_missing_message)) }
@@ -308,7 +305,15 @@ private fun AssistantPromptContent(
                             fontSize = 12.sp,
                             fontFamily = JetbrainsMono,
                             lineHeight = 16.sp
-                        )
+                        ),
+                        persistDebounceMs = 300,
+                        onPersist = {
+                            onUpdate(
+                                assistant.copy(
+                                    messageTemplate = it
+                                )
+                            )
+                        },
                     )
                 },
                 description = {
@@ -461,9 +466,19 @@ private fun AssistantPromptContent(
                                 Icon(HugeIcons.Cancel01, null)
                             }
                         }
-                        OutlinedTextField(
-                            value = presetMessage.toText(),
-                            onValueChange = { text ->
+                        val presetTextState = rememberTextFieldState(initialText = presetMessage.toText())
+                        LaunchedEffect(assistant.presetMessages.size, index) {
+                            val modelText = assistant.presetMessages.getOrNull(index)?.toText()
+                            if (modelText != null && presetTextState.text.toString() != modelText) {
+                                presetTextState.setTextAndPlaceCursorAtEnd(modelText)
+                            }
+                        }
+                        ManagedTextField(
+                            state = presetTextState,
+                            modifier = Modifier.fillMaxWidth(),
+                            lineLimits = TextFieldLineLimits.MultiLine(maxHeightInLines = 6),
+                            persistDebounceMs = 300,
+                            onPersist = { text ->
                                 onUpdate(
                                     assistant.copy(
                                         presetMessages = assistant.presetMessages.mapIndexed { i, msg ->
@@ -476,8 +491,6 @@ private fun AssistantPromptContent(
                                     )
                                 )
                             },
-                            modifier = Modifier.fillMaxWidth(),
-                            maxLines = 6
                         )
                     }
                 }
@@ -650,9 +663,12 @@ private fun AssistantRegexCard(
 
             if (expanded) {
 
-                OutlinedTextField(
-                    value = regex.name,
-                    onValueChange = { name ->
+                ManagedTextField(
+                    state = rememberTextFieldState(initialText = regex.name),
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(stringResource(R.string.assistant_page_regex_name)) },
+                    persistDebounceMs = 300,
+                    onPersist = { name ->
                         onUpdate(
                             assistant.copy(
                                 regexes = assistant.regexes.mapIndexed { i, reg ->
@@ -665,18 +681,20 @@ private fun AssistantRegexCard(
                             )
                         )
                     },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text(stringResource(R.string.assistant_page_regex_name)) }
                 )
 
-                OutlinedTextField(
-                    value = regex.findRegex,
-                    onValueChange = { findRegex ->
+                ManagedTextField(
+                    state = rememberTextFieldState(initialText = regex.findRegex),
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(stringResource(R.string.assistant_page_regex_find_regex)) },
+                    placeholder = { Text("e.g., \\b\\w+@\\w+\\.\\w+\\b") },
+                    persistDebounceMs = 300,
+                    onPersist = { findRegex ->
                         onUpdate(
                             assistant.copy(
                                 regexes = assistant.regexes.mapIndexed { i, reg ->
                                     if (i == index) {
-                                        reg.copy(findRegex = findRegex.trim())
+                                        reg.copy(findRegex = findRegex)
                                     } else {
                                         reg
                                     }
@@ -684,14 +702,15 @@ private fun AssistantRegexCard(
                             )
                         )
                     },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text(stringResource(R.string.assistant_page_regex_find_regex)) },
-                    placeholder = { Text("e.g., \\b\\w+@\\w+\\.\\w+\\b") },
                 )
 
-                OutlinedTextField(
-                    value = regex.replaceString,
-                    onValueChange = { replaceString ->
+                ManagedTextField(
+                    state = rememberTextFieldState(initialText = regex.replaceString),
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(stringResource(R.string.assistant_page_regex_replace_string)) },
+                    placeholder = { Text("e.g., [EMAIL]") },
+                    persistDebounceMs = 300,
+                    onPersist = { replaceString ->
                         onUpdate(
                             assistant.copy(
                                 regexes = assistant.regexes.mapIndexed { i, reg ->
@@ -704,9 +723,6 @@ private fun AssistantRegexCard(
                             )
                         )
                     },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text(stringResource(R.string.assistant_page_regex_replace_string)) },
-                    placeholder = { Text("e.g., [EMAIL]") }
                 )
 
                 Column {

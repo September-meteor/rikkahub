@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -14,6 +15,8 @@ import androidx.compose.ui.unit.dp
 import me.rerere.asr.ASRProviderSetting
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.ui.FormItem
+import me.rerere.rikkahub.ui.components.ui.rememberSyncedTextFieldState
+import me.rerere.rikkahub.ui.components.ui.ManagedTextField
 import me.rerere.rikkahub.ui.components.ui.OutlinedNumberInput
 
 @Composable
@@ -48,11 +51,12 @@ fun ASRProviderConfigure(
             label = { Text(stringResource(R.string.setting_asr_configure_name)) },
             description = { Text(stringResource(R.string.setting_asr_configure_name_desc)) }
         ) {
-            OutlinedTextField(
-                value = setting.name,
-                onValueChange = { onValueChange(setting.copyProvider(name = it)) },
+            ManagedTextField(
+                state = rememberSyncedTextFieldState(setting.name),
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("OpenAI Realtime") }
+                placeholder = { Text("OpenAI Realtime") },
+                persistDebounceMs = 250,
+                onPersist = { onValueChange(setting.copyProvider(name = it)) },
             )
         }
 
@@ -75,11 +79,12 @@ private fun OpenAIRealtimeASRConfiguration(
         label = { Text(stringResource(R.string.setting_asr_configure_api_key)) },
         description = { Text(stringResource(R.string.setting_asr_configure_openai_api_key_desc)) }
     ) {
-        OutlinedTextField(
-            value = setting.apiKey,
-            onValueChange = { onValueChange(setting.copy(apiKey = it)) },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.apiKey),
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("sk-...") }
+            placeholder = { Text("sk-...") },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(apiKey = it)) },
         )
     }
 
@@ -87,11 +92,12 @@ private fun OpenAIRealtimeASRConfiguration(
         label = { Text(stringResource(R.string.setting_asr_configure_websocket_url)) },
         description = { Text(stringResource(R.string.setting_asr_configure_openai_websocket_desc)) }
     ) {
-        OutlinedTextField(
-            value = setting.websocketUrl,
-            onValueChange = { onValueChange(setting.copy(websocketUrl = it)) },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.websocketUrl),
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("wss://api.openai.com/v1/realtime?intent=transcription") }
+            placeholder = { Text("wss://api.openai.com/v1/realtime?intent=transcription") },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(websocketUrl = it)) },
         )
     }
 
@@ -99,11 +105,12 @@ private fun OpenAIRealtimeASRConfiguration(
         label = { Text(stringResource(R.string.setting_asr_configure_model)) },
         description = { Text(stringResource(R.string.setting_asr_configure_model_desc)) }
     ) {
-        OutlinedTextField(
-            value = setting.model,
-            onValueChange = { onValueChange(setting.copy(model = it)) },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.model),
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("gpt-4o-transcribe") }
+            placeholder = { Text("gpt-4o-transcribe") },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(model = it)) },
         )
     }
 
@@ -111,11 +118,12 @@ private fun OpenAIRealtimeASRConfiguration(
         label = { Text(stringResource(R.string.setting_asr_configure_language)) },
         description = { Text(stringResource(R.string.setting_asr_configure_language_iso_desc)) }
     ) {
-        OutlinedTextField(
-            value = setting.language,
-            onValueChange = { onValueChange(setting.copy(language = it)) },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.language),
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("auto") }
+            placeholder = { Text("auto") },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(language = it)) },
         )
     }
 
@@ -123,12 +131,13 @@ private fun OpenAIRealtimeASRConfiguration(
         label = { Text(stringResource(R.string.setting_asr_configure_prompt)) },
         description = { Text(stringResource(R.string.setting_asr_configure_prompt_desc)) }
     ) {
-        OutlinedTextField(
-            value = setting.prompt,
-            onValueChange = { onValueChange(setting.copy(prompt = it)) },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.prompt),
             modifier = Modifier.fillMaxWidth(),
-            minLines = 2,
-            placeholder = { Text("Optional") }
+            lineLimits = TextFieldLineLimits.MultiLine(minHeightInLines = 2),
+            placeholder = { Text("Optional") },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(prompt = it)) },
         )
     }
 
@@ -190,11 +199,12 @@ private fun DashScopeASRConfiguration(
         label = { Text(stringResource(R.string.setting_asr_configure_api_key)) },
         description = { Text(stringResource(R.string.setting_asr_configure_dashscope_api_key_desc)) }
     ) {
-        OutlinedTextField(
-            value = setting.apiKey,
-            onValueChange = { onValueChange(setting.copy(apiKey = it)) },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.apiKey),
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("sk-...") }
+            placeholder = { Text("sk-...") },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(apiKey = it)) },
         )
     }
 
@@ -202,11 +212,12 @@ private fun DashScopeASRConfiguration(
         label = { Text(stringResource(R.string.setting_asr_configure_websocket_url)) },
         description = { Text(stringResource(R.string.setting_asr_configure_dashscope_websocket_desc)) }
     ) {
-        OutlinedTextField(
-            value = setting.websocketUrl,
-            onValueChange = { onValueChange(setting.copy(websocketUrl = it)) },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.websocketUrl),
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("wss://dashscope.aliyuncs.com/api-ws/v1/realtime") }
+            placeholder = { Text("wss://dashscope.aliyuncs.com/api-ws/v1/realtime") },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(websocketUrl = it)) },
         )
     }
 
@@ -214,11 +225,12 @@ private fun DashScopeASRConfiguration(
         label = { Text(stringResource(R.string.setting_asr_configure_model)) },
         description = { Text(stringResource(R.string.setting_asr_configure_model_desc)) }
     ) {
-        OutlinedTextField(
-            value = setting.model,
-            onValueChange = { onValueChange(setting.copy(model = it)) },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.model),
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("qwen3-asr-flash-realtime-2026-02-10") }
+            placeholder = { Text("qwen3-asr-flash-realtime-2026-02-10") },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(model = it)) },
         )
     }
 
@@ -226,11 +238,12 @@ private fun DashScopeASRConfiguration(
         label = { Text(stringResource(R.string.setting_asr_configure_language)) },
         description = { Text(stringResource(R.string.setting_asr_configure_language_iso_desc)) }
     ) {
-        OutlinedTextField(
-            value = setting.language,
-            onValueChange = { onValueChange(setting.copy(language = it)) },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.language),
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("zh") }
+            placeholder = { Text("zh") },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(language = it)) },
         )
     }
 
@@ -276,11 +289,12 @@ private fun VolcengineASRConfiguration(
         label = { Text(stringResource(R.string.setting_asr_configure_api_key)) },
         description = { Text(stringResource(R.string.setting_asr_configure_volcengine_api_key_desc)) }
     ) {
-        OutlinedTextField(
-            value = setting.apiKey,
-            onValueChange = { onValueChange(setting.copy(apiKey = it)) },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.apiKey),
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("your-api-key") }
+            placeholder = { Text("your-api-key") },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(apiKey = it)) },
         )
     }
 
@@ -288,11 +302,12 @@ private fun VolcengineASRConfiguration(
         label = { Text(stringResource(R.string.setting_asr_configure_websocket_url)) },
         description = { Text(stringResource(R.string.setting_asr_configure_volcengine_websocket_desc)) }
     ) {
-        OutlinedTextField(
-            value = setting.websocketUrl,
-            onValueChange = { onValueChange(setting.copy(websocketUrl = it)) },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.websocketUrl),
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("wss://openspeech.bytedance.com/api/v3/sauc/bigmodel") }
+            placeholder = { Text("wss://openspeech.bytedance.com/api/v3/sauc/bigmodel") },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(websocketUrl = it)) },
         )
     }
 
@@ -300,11 +315,12 @@ private fun VolcengineASRConfiguration(
         label = { Text(stringResource(R.string.setting_asr_configure_resource_id)) },
         description = { Text(stringResource(R.string.setting_asr_configure_resource_id_desc)) }
     ) {
-        OutlinedTextField(
-            value = setting.resourceId,
-            onValueChange = { onValueChange(setting.copy(resourceId = it)) },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.resourceId),
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("volc.bigasr.sauc.duration") }
+            placeholder = { Text("volc.bigasr.sauc.duration") },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(resourceId = it)) },
         )
     }
 
@@ -312,11 +328,12 @@ private fun VolcengineASRConfiguration(
         label = { Text(stringResource(R.string.setting_asr_configure_language)) },
         description = { Text(stringResource(R.string.setting_asr_configure_language_code_desc)) }
     ) {
-        OutlinedTextField(
-            value = setting.language,
-            onValueChange = { onValueChange(setting.copy(language = it)) },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.language),
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("auto") }
+            placeholder = { Text("auto") },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(language = it)) },
         )
     }
 }
@@ -330,11 +347,12 @@ private fun MiMoASRConfiguration(
         label = { Text(stringResource(R.string.setting_asr_configure_api_key)) },
         description = { Text(stringResource(R.string.setting_asr_configure_mimo_api_key_desc)) }
     ) {
-        OutlinedTextField(
-            value = setting.apiKey,
-            onValueChange = { onValueChange(setting.copy(apiKey = it)) },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.apiKey),
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("sk-... or tp-...") }
+            placeholder = { Text("sk-... or tp-...") },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(apiKey = it)) },
         )
     }
 
@@ -342,11 +360,12 @@ private fun MiMoASRConfiguration(
         label = { Text(stringResource(R.string.setting_asr_configure_base_url)) },
         description = { Text(stringResource(R.string.setting_asr_configure_mimo_base_url_desc)) }
     ) {
-        OutlinedTextField(
-            value = setting.baseUrl,
-            onValueChange = { onValueChange(setting.copy(baseUrl = it)) },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.baseUrl),
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("https://api.xiaomimimo.com/v1") }
+            placeholder = { Text("https://api.xiaomimimo.com/v1") },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(baseUrl = it)) },
         )
     }
 
@@ -354,11 +373,12 @@ private fun MiMoASRConfiguration(
         label = { Text(stringResource(R.string.setting_asr_configure_model)) },
         description = { Text(stringResource(R.string.setting_asr_configure_mimo_model_desc)) }
     ) {
-        OutlinedTextField(
-            value = setting.model,
-            onValueChange = { onValueChange(setting.copy(model = it)) },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.model),
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("mimo-v2.5-asr") }
+            placeholder = { Text("mimo-v2.5-asr") },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(model = it)) },
         )
     }
 
@@ -366,11 +386,12 @@ private fun MiMoASRConfiguration(
         label = { Text(stringResource(R.string.setting_asr_configure_language)) },
         description = { Text(stringResource(R.string.setting_asr_configure_mimo_language_desc)) }
     ) {
-        OutlinedTextField(
-            value = setting.language,
-            onValueChange = { onValueChange(setting.copy(language = it)) },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.language),
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("auto") }
+            placeholder = { Text("auto") },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(language = it)) },
         )
     }
 
@@ -416,11 +437,12 @@ private fun StepASRConfiguration(
         label = { Text(stringResource(R.string.setting_asr_configure_api_key)) },
         description = { Text(stringResource(R.string.setting_asr_configure_step_api_key_desc)) }
     ) {
-        OutlinedTextField(
-            value = setting.apiKey,
-            onValueChange = { onValueChange(setting.copy(apiKey = it)) },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.apiKey),
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("your-stepfun-api-key") }
+            placeholder = { Text("your-stepfun-api-key") },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(apiKey = it)) },
         )
     }
 
@@ -428,11 +450,12 @@ private fun StepASRConfiguration(
         label = { Text(stringResource(R.string.setting_asr_configure_base_url)) },
         description = { Text(stringResource(R.string.setting_asr_configure_step_base_url_desc)) }
     ) {
-        OutlinedTextField(
-            value = setting.baseUrl,
-            onValueChange = { onValueChange(setting.copy(baseUrl = it)) },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.baseUrl),
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("https://api.stepfun.com") }
+            placeholder = { Text("https://api.stepfun.com") },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(baseUrl = it)) },
         )
     }
 
@@ -440,11 +463,12 @@ private fun StepASRConfiguration(
         label = { Text(stringResource(R.string.setting_asr_configure_model)) },
         description = { Text(stringResource(R.string.setting_asr_configure_step_model_desc)) }
     ) {
-        OutlinedTextField(
-            value = setting.model,
-            onValueChange = { onValueChange(setting.copy(model = it)) },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.model),
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("stepaudio-2.5-asr") }
+            placeholder = { Text("stepaudio-2.5-asr") },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(model = it)) },
         )
     }
 
@@ -452,11 +476,12 @@ private fun StepASRConfiguration(
         label = { Text(stringResource(R.string.setting_asr_configure_language)) },
         description = { Text(stringResource(R.string.setting_asr_configure_step_language_desc)) }
     ) {
-        OutlinedTextField(
-            value = setting.language,
-            onValueChange = { onValueChange(setting.copy(language = it)) },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.language),
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("auto") }
+            placeholder = { Text("auto") },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(language = it)) },
         )
     }
 
@@ -521,8 +546,8 @@ private fun StepASRConfiguration(
             value = setting.hotwords.joinToString(","),
             onValueChange = { text ->
                 val list = text.split(",")
-                    .map { it.trim() }
-                    .filter { it.isNotEmpty() }
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
                 onValueChange(setting.copy(hotwords = list))
             },
             modifier = Modifier.fillMaxWidth(),

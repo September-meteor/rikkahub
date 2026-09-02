@@ -4,6 +4,7 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.View
 import me.rerere.hugeicons.stroke.ViewOff
 import me.rerere.hugeicons.stroke.Upload02
+import androidx.compose.foundation.text.input.TextObfuscationMode
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,7 +32,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.MultiChoiceSegmentedButtonRow
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.Text
@@ -48,8 +48,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dokar.sonner.ToastType
@@ -58,6 +56,8 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.WebDavConfig
 import me.rerere.rikkahub.data.sync.webdav.WebDavBackupItem
 import me.rerere.rikkahub.ui.components.ui.CardGroup
+import me.rerere.rikkahub.ui.components.ui.ManagedTextField
+import me.rerere.rikkahub.ui.components.ui.rememberSyncedTextFieldState
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.pages.backup.BackupVM
 import me.rerere.rikkahub.utils.UiState
@@ -124,29 +124,27 @@ fun WebDavTab(
                 item(
                     headlineContent = { Text(stringResource(R.string.backup_page_webdav_server_address)) },
                     supportingContent = {
-                        OutlinedTextField(
+                        ManagedTextField(
+                            state = rememberSyncedTextFieldState(webDavConfig.url),
                             modifier = Modifier.fillMaxWidth(),
-                            value = webDavConfig.url,
-                            onValueChange = { updateWebDavConfig(webDavConfig.copy(url = it.trim())) },
                             placeholder = { Text("https://example.com/dav") },
-                            singleLine = true
+                            singleLine = true,
+                            persistDebounceMs = 300,
+                            onPersist = { updateWebDavConfig(webDavConfig.copy(url = it)) },
+                            normalizeOnBlur = { it.trim() },
                         )
                     },
                 )
                 item(
                     headlineContent = { Text(stringResource(R.string.backup_page_username)) },
                     supportingContent = {
-                        OutlinedTextField(
+                        ManagedTextField(
+                            state = rememberSyncedTextFieldState(webDavConfig.username),
                             modifier = Modifier.fillMaxWidth(),
-                            value = webDavConfig.username,
-                            onValueChange = {
-                                updateWebDavConfig(
-                                    webDavConfig.copy(
-                                        username = it.trim()
-                                    )
-                                )
-                            },
-                            singleLine = true
+                            singleLine = true,
+                            persistDebounceMs = 300,
+                            onPersist = { updateWebDavConfig(webDavConfig.copy(username = it)) },
+                            normalizeOnBlur = { it.trim() },
                         )
                     },
                 )
@@ -154,11 +152,10 @@ fun WebDavTab(
                     headlineContent = { Text(stringResource(R.string.backup_page_password)) },
                     supportingContent = {
                         var passwordVisible by remember { mutableStateOf(false) }
-                        OutlinedTextField(
+                        ManagedTextField(
+                            state = rememberSyncedTextFieldState(webDavConfig.password),
                             modifier = Modifier.fillMaxWidth(),
-                            value = webDavConfig.password,
-                            onValueChange = { updateWebDavConfig(webDavConfig.copy(password = it.trim())) },
-                            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                            singleLine = true,
                             trailingIcon = {
                                 val image = if (passwordVisible) {
                                     HugeIcons.ViewOff
@@ -169,18 +166,23 @@ fun WebDavTab(
                                     Icon(imageVector = image, contentDescription = null)
                                 }
                             },
-                            singleLine = true
+                            textObfuscationMode = if (passwordVisible) TextObfuscationMode.Visible else TextObfuscationMode.Hidden,
+                            persistDebounceMs = 300,
+                            onPersist = { updateWebDavConfig(webDavConfig.copy(password = it)) },
+                            normalizeOnBlur = { it.trim() },
                         )
                     },
                 )
                 item(
                     headlineContent = { Text(stringResource(R.string.backup_page_path)) },
                     supportingContent = {
-                        OutlinedTextField(
+                        ManagedTextField(
+                            state = rememberSyncedTextFieldState(webDavConfig.path),
                             modifier = Modifier.fillMaxWidth(),
-                            value = webDavConfig.path,
-                            onValueChange = { updateWebDavConfig(webDavConfig.copy(path = it.trim())) },
-                            singleLine = true
+                            singleLine = true,
+                            persistDebounceMs = 300,
+                            onPersist = { updateWebDavConfig(webDavConfig.copy(path = it)) },
+                            normalizeOnBlur = { it.trim() },
                         )
                     },
                 )

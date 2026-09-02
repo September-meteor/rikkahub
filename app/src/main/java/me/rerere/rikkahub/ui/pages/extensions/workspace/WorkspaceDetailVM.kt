@@ -5,6 +5,8 @@ import android.content.Intent
 import android.net.Uri
 import android.os.SystemClock
 import android.util.Log
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -47,6 +49,13 @@ class WorkspaceDetailVM(
 ) : ViewModel() {
     private val _state = MutableStateFlow(WorkspaceDetailState())
     val state = _state.asStateFlow()
+
+    /**
+     * 「自定义排除模式」输入框文本状态（对齐消息输入框逻辑）：
+     * 输入以 state 为准，持久化通过 debounce 单向推送，避免每键 Room 回流覆盖导致光标跳动。
+     */
+    val customIgnoreState = TextFieldState()
+    private var customIgnoreInitialized = false
 
     private val _terminalState = MutableStateFlow(WorkspaceTerminalState())
     val terminalState = _terminalState.asStateFlow()
@@ -746,6 +755,8 @@ class WorkspaceDetailVM(
     fun setCustomIgnorePatterns(patterns: String) {
         viewModelScope.launch {
             val workspace = repository.getById(id) ?: return@launch
+            // 幂等：值与库中一致时跳过（防抖推送初次携带已加载的初始值时避免无效写盘）
+            if (workspace.customIgnorePatterns == patterns) return@launch
             repository.updateWorkspace(
                 workspace.copy(customIgnorePatterns = patterns, updatedAt = System.currentTimeMillis())
             )
@@ -1236,6 +1247,11 @@ class WorkspaceDetailVM(
                 recoverSyncRootFromSource(workspace.sourceTreeUri)?.let { syncRoots = setOf(it) }
             }
             _state.update { it.copy(workspace = workspace, syncRoots = syncRoots) }
+            // 首次加载到工作区时初始化排除模式输入框；此后不再随 flow 回流覆盖（防止打断输入）
+            if (!customIgnoreInitialized && workspace != null) {
+                customIgnoreState.setTextAndPlaceCursorAtEnd(workspace.customIgnorePatterns)
+                customIgnoreInitialized = true
+            }
         }
     }
 

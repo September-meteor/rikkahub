@@ -49,6 +49,8 @@ import me.rerere.rikkahub.ui.components.ai.ModelSelector
 import me.rerere.rikkahub.ui.components.ai.ReasoningButton
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FormItem
+import me.rerere.rikkahub.ui.components.ui.ManagedTextField
+import me.rerere.rikkahub.ui.components.ui.rememberSyncedTextFieldState
 import me.rerere.rikkahub.ui.components.ui.Select
 import me.rerere.rikkahub.ui.components.ui.TagsInput
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
@@ -154,17 +156,18 @@ internal fun AssistantBasicContent(
                 modifier = Modifier.padding(8.dp),
 
                 ) {
-                OutlinedTextField(
-                    value = assistant.name,
-                    onValueChange = {
-                        onUpdate(
-                            assistant.copy(
-                                name = it
+                    ManagedTextField(
+                        state = rememberSyncedTextFieldState(assistant.name),
+                        modifier = Modifier.fillMaxWidth(),
+                        persistDebounceMs = 300,
+                        onPersist = {
+                            onUpdate(
+                                assistant.copy(
+                                    name = it
+                                )
                             )
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                        },
+                    )
             }
 
             HorizontalDivider()
@@ -422,19 +425,19 @@ internal fun AssistantBasicContent(
                         ) {
                             contextMessageLimitInput = input
                             input.toIntOrNull()
-                                ?.takeIf { it == 0 || it >= MIN_CONTEXT_MESSAGE_LIMIT }
-                                ?.takeIf { it != assistant.contextMessageLimit }
-                                ?.let { onUpdate(assistant.copy(contextMessageLimit = it)) }
+                            ?.takeIf { it == 0 || it >= MIN_CONTEXT_MESSAGE_LIMIT }
+                            ?.takeIf { it != assistant.contextMessageLimit }
+                            ?.let { onUpdate(assistant.copy(contextMessageLimit = it)) }
                         }
                     },
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .onFocusChanged { focusState ->
-                            if (contextMessageLimitFocused && !focusState.isFocused) {
-                                commitContextMessageLimit()
-                            }
-                            contextMessageLimitFocused = focusState.isFocused
-                        },
+                    .fillMaxWidth()
+                    .onFocusChanged { focusState ->
+                        if (contextMessageLimitFocused && !focusState.isFocused) {
+                            commitContextMessageLimit()
+                        }
+                        contextMessageLimitFocused = focusState.isFocused
+                    },
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Number,
                         imeAction = ImeAction.Done
@@ -530,20 +533,8 @@ internal fun AssistantBasicContent(
                     Text(stringResource(R.string.assistant_page_max_tokens_desc))
                 }
             ) {
-                OutlinedTextField(
-                    value = assistant.maxTokens?.toString() ?: "",
-                    onValueChange = { text ->
-                        val tokens = if (text.isBlank()) {
-                            null
-                        } else {
-                            text.toIntOrNull()?.takeIf { it > 0 }
-                        }
-                        onUpdate(
-                            assistant.copy(
-                                maxTokens = tokens
-                            )
-                        )
-                    },
+                ManagedTextField(
+                    state = rememberSyncedTextFieldState(assistant.maxTokens?.toString() ?: ""),
                     modifier = Modifier.fillMaxWidth(),
                     placeholder = {
                         Text(stringResource(R.string.assistant_page_max_tokens_no_limit))
@@ -554,7 +545,23 @@ internal fun AssistantBasicContent(
                         } else {
                             Text(stringResource(R.string.assistant_page_max_tokens_no_token_limit))
                         }
-                    }
+                    },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    persistDebounceMs = 250,
+                    onPersist = { text ->
+                        val tokens = if (text.isBlank()) {
+                            null
+                        } else {
+                            text.toIntOrNull()?.takeIf { it > 0 }
+                        }
+                        if (text.isBlank() || tokens != null) {
+                            onUpdate(
+                                assistant.copy(
+                                    maxTokens = tokens
+                                )
+                            )
+                        }
+                    },
                 )
             }
         }

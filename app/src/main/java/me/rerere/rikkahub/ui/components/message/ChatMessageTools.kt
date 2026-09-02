@@ -12,6 +12,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.rememberTextFieldState
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
@@ -26,16 +29,22 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import java.util.HashMap
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -60,6 +69,15 @@ import me.rerere.rikkahub.ui.modifier.shimmer
 import me.rerere.rikkahub.utils.JsonInstant
 
 private const val ASK_USER_TOOL_NAME = "ask_user"
+
+/**
+ * answers 的 saveable Saver：AskUser 自由文本输入位于可折叠/可回收的消息项内，
+ * 用 rememberSaveable 保证滚动回收、折叠展开后已输入内容不丢失。
+ */
+private val AnswersMapSaver = Saver<SnapshotStateMap<String, String>, HashMap<String, String>>(
+    save = { HashMap(it) },
+    restore = { mutableStateMapOf<String, String>().apply { putAll(it) } },
+)
 
 @Composable
 fun ChainOfThoughtScope.ChatMessageServerToolStep(tool: UIMessagePart.ServerTool) {
@@ -261,12 +279,11 @@ private fun ChainOfThoughtScope.AskUserToolStep(
 ) {
     val isPending = tool.approvalState is ToolApprovalState.Pending
     val isAnswered = tool.approvalState is ToolApprovalState.Answered
-    val arguments = tool.inputAsJson()
 
-    // Parse questions from arguments
-    val questions = remember(arguments) {
+    // Parse questions from arguments（以原始 input 字符串为键，避免每帧重解析导致组合结构抖动）
+    val questions = remember(tool.input) {
         runCatching {
-            arguments.jsonObject["questions"]?.jsonArray?.map { q ->
+            tool.inputAsJson().jsonObject["questions"]?.jsonArray?.map { q ->
                 val obj = q.jsonObject
                 AskUserQuestion(
                     id = obj["id"]?.jsonPrimitive?.contentOrNull ?: "",
@@ -278,8 +295,8 @@ private fun ChainOfThoughtScope.AskUserToolStep(
         }.getOrElse { emptyList() }
     }
 
-    // Track answers for text/single questions
-    val answers = remember { mutableStateMapOf<String, String>() }
+    // Track answers for text/single questions（saveable：跨滚动/折叠保留已输入内容）
+    val answers = rememberSaveable(saver = AnswersMapSaver) { mutableStateMapOf<String, String>() }
     // Track selected options for multi questions
     val multiAnswers = remember { mutableStateMapOf<String, Set<String>>() }
 
@@ -325,6 +342,13 @@ private fun ChainOfThoughtScope.AskUserToolStep(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurface,
                         )
+
+                        // 每个问题一个 TextFieldState：自由文本输入的唯一数据源（IME 组合态稳定、光标不跳），
+                        // answers 仅作跨滚动/折叠的 saveable 镜像，由 snapshotFlow 单向同步。
+                        val answerState = rememberTextFieldState(initialText = answers[q.id] ?: "")
+                        LaunchedEffect(q.id) {
+                            snapshotFlow { answerState.text.toString() }.collect { answers[q.id] = it }
+                        }
 
                         if (isPending && onToolAnswer != null) {
                             when (q.selectionType) {
@@ -388,7 +412,7 @@ private fun ChainOfThoughtScope.AskUserToolStep(
                                             q.options.forEach { option ->
                                                 FilterChip(
                                                     selected = answers[q.id] == option,
-                                                    onClick = { answers[q.id] = option },
+                                                    onClick = { answerState.setTextAndPlaceCursorAtEnd(option) },
                                                     label = {
                                                         Text(
                                                             text = option,
@@ -400,15 +424,15 @@ private fun ChainOfThoughtScope.AskUserToolStep(
                                         }
                                     }
 
-                                    // Free text input
+                                    // Free text input（TextFieldState：智能配对符号可正常输入，光标稳定）
                                     OutlinedTextField(
-                                        value = answers[q.id] ?: "",
-                                        onValueChange = { answers[q.id] = it },
+                                        state = answerState,
                                         modifier = Modifier.fillMaxWidth(),
                                         textStyle = MaterialTheme.typography.bodySmall,
-                                        singleLine = false,
-                                        minLines = 1,
-                                        maxLines = 3,
+                                        lineLimits = TextFieldLineLimits.MultiLine(
+                                            minHeightInLines = 1,
+                                            maxHeightInLines = 3,
+                                        ),
                                     )
                                 }
                             }

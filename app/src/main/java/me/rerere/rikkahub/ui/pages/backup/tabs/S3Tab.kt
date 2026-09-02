@@ -4,6 +4,7 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.View
 import me.rerere.hugeicons.stroke.ViewOff
 import me.rerere.hugeicons.stroke.Upload02
+import androidx.compose.foundation.text.input.TextObfuscationMode
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,7 +32,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.MultiChoiceSegmentedButtonRow
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.Text
@@ -49,8 +49,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dokar.sonner.ToastType
@@ -58,6 +56,9 @@ import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.sync.S3BackupItem
 import me.rerere.rikkahub.data.sync.s3.S3Config
+import me.rerere.rikkahub.ui.components.ui.CardGroup
+import me.rerere.rikkahub.ui.components.ui.ManagedTextField
+import me.rerere.rikkahub.ui.components.ui.rememberSyncedTextFieldState
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.pages.backup.BackupVM
@@ -125,23 +126,27 @@ fun S3Tab(
                 item(
                     headlineContent = { Text(stringResource(R.string.backup_page_s3_endpoint)) },
                     supportingContent = {
-                        OutlinedTextField(
+                        ManagedTextField(
+                            state = rememberSyncedTextFieldState(s3Config.endpoint),
                             modifier = Modifier.fillMaxWidth(),
-                            value = s3Config.endpoint,
-                            onValueChange = { updateS3Config(s3Config.copy(endpoint = it.trim())) },
                             placeholder = { Text("https://s3.amazonaws.com") },
-                            singleLine = true
+                            singleLine = true,
+                            persistDebounceMs = 300,
+                            onPersist = { updateS3Config(s3Config.copy(endpoint = it)) },
+                            normalizeOnBlur = { it.trim() },
                         )
                     },
                 )
                 item(
                     headlineContent = { Text(stringResource(R.string.backup_page_s3_access_key_id)) },
                     supportingContent = {
-                        OutlinedTextField(
+                        ManagedTextField(
+                            state = rememberSyncedTextFieldState(s3Config.accessKeyId),
                             modifier = Modifier.fillMaxWidth(),
-                            value = s3Config.accessKeyId,
-                            onValueChange = { updateS3Config(s3Config.copy(accessKeyId = it.trim())) },
-                            singleLine = true
+                            singleLine = true,
+                            persistDebounceMs = 300,
+                            onPersist = { updateS3Config(s3Config.copy(accessKeyId = it)) },
+                            normalizeOnBlur = { it.trim() },
                         )
                     },
                 )
@@ -149,11 +154,10 @@ fun S3Tab(
                     headlineContent = { Text(stringResource(R.string.backup_page_s3_secret_access_key)) },
                     supportingContent = {
                         var passwordVisible by remember { mutableStateOf(false) }
-                        OutlinedTextField(
+                        ManagedTextField(
+                            state = rememberSyncedTextFieldState(s3Config.secretAccessKey),
                             modifier = Modifier.fillMaxWidth(),
-                            value = s3Config.secretAccessKey,
-                            onValueChange = { updateS3Config(s3Config.copy(secretAccessKey = it.trim())) },
-                            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                            singleLine = true,
                             trailingIcon = {
                                 val image = if (passwordVisible) {
                                     HugeIcons.ViewOff
@@ -164,19 +168,24 @@ fun S3Tab(
                                     Icon(imageVector = image, contentDescription = null)
                                 }
                             },
-                            singleLine = true
+                            textObfuscationMode = if (passwordVisible) TextObfuscationMode.Visible else TextObfuscationMode.Hidden,
+                            persistDebounceMs = 300,
+                            onPersist = { updateS3Config(s3Config.copy(secretAccessKey = it)) },
+                            normalizeOnBlur = { it.trim() },
                         )
                     },
                 )
                 item(
                     headlineContent = { Text(stringResource(R.string.backup_page_s3_bucket)) },
                     supportingContent = {
-                        OutlinedTextField(
+                        ManagedTextField(
+                            state = rememberSyncedTextFieldState(s3Config.bucket),
                             modifier = Modifier.fillMaxWidth(),
-                            value = s3Config.bucket,
-                            onValueChange = { updateS3Config(s3Config.copy(bucket = it.trim())) },
                             placeholder = { Text("my-bucket") },
-                            singleLine = true
+                            singleLine = true,
+                            persistDebounceMs = 300,
+                            onPersist = { updateS3Config(s3Config.copy(bucket = it)) },
+                            normalizeOnBlur = { it.trim() },
                         )
                     },
                 )
@@ -193,12 +202,14 @@ fun S3Tab(
                 item(
                     headlineContent = { Text(stringResource(R.string.backup_page_s3_region)) },
                     supportingContent = {
-                        OutlinedTextField(
+                        ManagedTextField(
+                            state = rememberSyncedTextFieldState(s3Config.region),
                             modifier = Modifier.fillMaxWidth(),
-                            value = s3Config.region,
-                            onValueChange = { updateS3Config(s3Config.copy(region = it.trim())) },
                             placeholder = { Text("auto") },
-                            singleLine = true
+                            singleLine = true,
+                            persistDebounceMs = 300,
+                            onPersist = { updateS3Config(s3Config.copy(region = it)) },
+                            normalizeOnBlur = { it.trim() },
                         )
                     },
                 )

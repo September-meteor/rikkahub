@@ -21,6 +21,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -78,6 +80,7 @@ import androidx.compose.ui.res.stringResource
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.ImagePreviewDialog
+import me.rerere.rikkahub.ui.components.ui.ManagedTextField
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
@@ -255,6 +258,7 @@ fun WorkspaceDetailPage(id: String) {
                     onToolApprovalChange = vm::setToolApproval,
                     onEnableGitignoreChange = vm::setEnableGitignore,
                     onCustomIgnoreChange = vm::setCustomIgnorePatterns,
+                    customIgnoreState = vm.customIgnoreState,
                     onSyncCheckModeChange = vm::setSyncCheckMode,
                     onConflictModeChange = vm::setImportConflictMode,
                 )
@@ -489,6 +493,7 @@ private fun WorkspaceBasicPage(
     onToolApprovalChange: (String, Boolean) -> Unit,
     onEnableGitignoreChange: (Boolean) -> Unit,
     onCustomIgnoreChange: (String) -> Unit,
+    customIgnoreState: TextFieldState,
     onSyncCheckModeChange: (SyncCheckMode) -> Unit,
     onConflictModeChange: (ImportConflictMode) -> Unit,
 ) {
@@ -572,6 +577,7 @@ private fun WorkspaceBasicPage(
                 workspace = workspace,
                 onEnableGitignoreChange = onEnableGitignoreChange,
                 onCustomIgnoreChange = onCustomIgnoreChange,
+                customIgnoreState = customIgnoreState,
                 onSyncCheckModeChange = onSyncCheckModeChange,
                 onConflictModeChange = onConflictModeChange,
             )
@@ -1079,6 +1085,7 @@ private fun WorkspaceImportSettingsCard(
     workspace: WorkspaceEntity?,
     onEnableGitignoreChange: (Boolean) -> Unit,
     onCustomIgnoreChange: (String) -> Unit,
+    customIgnoreState: TextFieldState,
     onSyncCheckModeChange: (SyncCheckMode) -> Unit,
     onConflictModeChange: (ImportConflictMode) -> Unit,
 ) {
@@ -1131,15 +1138,16 @@ private fun WorkspaceImportSettingsCard(
                 )
             }
 
-            // 自定义排除目录输入框
-            OutlinedTextField(
-                value = workspace?.customIgnorePatterns ?: "",
-                onValueChange = onCustomIgnoreChange,
+            // 自定义排除目录输入框（TextFieldState + 防抖持久化：输入不随 Room 回流，光标稳定）
+            ManagedTextField(
+                state = customIgnoreState,
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text(stringResource(R.string.workspace_detail_custom_ignore)) },
                 placeholder = { Text(stringResource(R.string.workspace_detail_custom_ignore_hint)) },
                 enabled = workspace != null,
-                minLines = 2,
+                lineLimits = TextFieldLineLimits.MultiLine(minHeightInLines = 2, maxHeightInLines = 4),
+                persistDebounceMs = 400,
+                onPersist = onCustomIgnoreChange,
             )
 
             // 上传冲突处理：同名文件/目录默认行为（关闭 = 创建副本，开启 = 覆盖并同步删除多余内容）

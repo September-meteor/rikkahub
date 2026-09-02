@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -46,15 +47,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import me.rerere.highlight.LocalCodeHighlighter
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.nav.BackButton
-import me.rerere.rikkahub.ui.components.richtext.HighlightCodeVisualTransformation
 import me.rerere.rikkahub.ui.components.ui.FormItem
+import me.rerere.rikkahub.ui.components.ui.rememberSyncedTextFieldState
+import me.rerere.rikkahub.ui.components.ui.ManagedTextField
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
-import me.rerere.rikkahub.ui.theme.LocalDarkMode
 import me.rerere.rikkahub.utils.plus
 import me.rerere.search.DoubaoSearchMode
 import me.rerere.search.SearchCommonOptions
@@ -360,12 +360,12 @@ internal fun TavilyOptions(
             Text(stringResource(R.string.search_detail_api_key))
         }
     ) {
-        OutlinedTextField(
-            value = options.apiKey,
-            onValueChange = {
-                onUpdateOptions(options.copy(apiKey = it))
-            },
-            modifier = Modifier.fillMaxWidth()
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(options.apiKey),
+            modifier = Modifier.fillMaxWidth(),
+            persistDebounceMs = 250,
+            onPersist = { onUpdateOptions(options.copy(apiKey = it)) },
+            normalizeOnBlur = { it.trim() },
         )
     }
 
@@ -403,12 +403,12 @@ internal fun ExaOptions(
             Text(stringResource(R.string.search_detail_api_key))
         }
     ) {
-        OutlinedTextField(
-            value = options.apiKey,
-            onValueChange = {
-                onUpdateOptions(options.copy(apiKey = it))
-            },
-            modifier = Modifier.fillMaxWidth()
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(options.apiKey),
+            modifier = Modifier.fillMaxWidth(),
+            persistDebounceMs = 250,
+            onPersist = { onUpdateOptions(options.copy(apiKey = it)) },
+            normalizeOnBlur = { it.trim() },
         )
     }
 }
@@ -423,12 +423,12 @@ internal fun ZhipuOptions(
             Text(stringResource(R.string.search_detail_api_key))
         }
     ) {
-        OutlinedTextField(
-            value = options.apiKey,
-            onValueChange = {
-                onUpdateOptions(options.copy(apiKey = it))
-            },
-            modifier = Modifier.fillMaxWidth()
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(options.apiKey),
+            modifier = Modifier.fillMaxWidth(),
+            persistDebounceMs = 250,
+            onPersist = { onUpdateOptions(options.copy(apiKey = it)) },
+            normalizeOnBlur = { it.trim() },
         )
     }
 }
@@ -439,10 +439,12 @@ internal fun DoubaoOptions(
     onUpdateOptions: (SearchServiceOptions.DoubaoOptions) -> Unit
 ) {
     FormItem(label = { Text(stringResource(R.string.search_detail_api_key)) }) {
-        OutlinedTextField(
-            value = options.apiKey,
-            onValueChange = { onUpdateOptions(options.copy(apiKey = it)) },
-            modifier = Modifier.fillMaxWidth()
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(options.apiKey),
+            modifier = Modifier.fillMaxWidth(),
+            persistDebounceMs = 250,
+            onPersist = { onUpdateOptions(options.copy(apiKey = it)) },
+            normalizeOnBlur = { it.trim() },
         )
     }
 
@@ -472,12 +474,12 @@ internal fun SearXNGOptions(
             Text(stringResource(R.string.search_detail_api_url))
         }
     ) {
-        OutlinedTextField(
-            value = options.url,
-            onValueChange = {
-                onUpdateOptions(options.copy(url = it))
-            },
-            modifier = Modifier.fillMaxWidth()
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(options.url),
+            modifier = Modifier.fillMaxWidth(),
+            persistDebounceMs = 250,
+            onPersist = { onUpdateOptions(options.copy(url = it)) },
+            normalizeOnBlur = { it.trim() },
         )
     }
 
@@ -486,12 +488,12 @@ internal fun SearXNGOptions(
             Text(stringResource(R.string.search_detail_engines))
         }
     ) {
-        OutlinedTextField(
-            value = options.engines,
-            onValueChange = {
-                onUpdateOptions(options.copy(engines = it))
-            },
-            modifier = Modifier.fillMaxWidth()
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(options.engines),
+            modifier = Modifier.fillMaxWidth(),
+            persistDebounceMs = 250,
+            onPersist = { onUpdateOptions(options.copy(engines = it)) },
+            normalizeOnBlur = { it.trim() },
         )
     }
 
@@ -500,12 +502,12 @@ internal fun SearXNGOptions(
             Text(stringResource(R.string.search_detail_language))
         }
     ) {
-        OutlinedTextField(
-            value = options.language,
-            onValueChange = {
-                onUpdateOptions(options.copy(language = it))
-            },
-            modifier = Modifier.fillMaxWidth()
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(options.language),
+            modifier = Modifier.fillMaxWidth(),
+            persistDebounceMs = 250,
+            onPersist = { onUpdateOptions(options.copy(language = it)) },
+            normalizeOnBlur = { it.trim() },
         )
     }
 
@@ -514,12 +516,12 @@ internal fun SearXNGOptions(
             Text(stringResource(R.string.search_detail_username))
         }
     ) {
-        OutlinedTextField(
-            value = options.username,
-            onValueChange = {
-                onUpdateOptions(options.copy(username = it))
-            },
-            modifier = Modifier.fillMaxWidth()
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(options.username),
+            modifier = Modifier.fillMaxWidth(),
+            persistDebounceMs = 250,
+            onPersist = { onUpdateOptions(options.copy(username = it)) },
+            normalizeOnBlur = { it.trim() },
         )
     }
 
@@ -528,12 +530,12 @@ internal fun SearXNGOptions(
             Text(stringResource(R.string.search_detail_password))
         }
     ) {
-        OutlinedTextField(
-            value = options.password,
-            onValueChange = {
-                onUpdateOptions(options.copy(password = it))
-            },
-            modifier = Modifier.fillMaxWidth()
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(options.password),
+            modifier = Modifier.fillMaxWidth(),
+            persistDebounceMs = 250,
+            onPersist = { onUpdateOptions(options.copy(password = it)) },
+            normalizeOnBlur = { it.trim() },
         )
     }
 }
@@ -548,12 +550,12 @@ internal fun SearchLinkUpOptions(
             Text(stringResource(R.string.search_detail_api_key))
         }
     ) {
-        OutlinedTextField(
-            value = options.apiKey,
-            onValueChange = {
-                onUpdateOptions(options.copy(apiKey = it))
-            },
-            modifier = Modifier.fillMaxWidth()
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(options.apiKey),
+            modifier = Modifier.fillMaxWidth(),
+            persistDebounceMs = 250,
+            onPersist = { onUpdateOptions(options.copy(apiKey = it)) },
+            normalizeOnBlur = { it.trim() },
         )
     }
 
@@ -591,12 +593,12 @@ internal fun BraveOptions(
             Text(stringResource(R.string.search_detail_api_key))
         }
     ) {
-        OutlinedTextField(
-            value = options.apiKey,
-            onValueChange = {
-                onUpdateOptions(options.copy(apiKey = it))
-            },
-            modifier = Modifier.fillMaxWidth()
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(options.apiKey),
+            modifier = Modifier.fillMaxWidth(),
+            persistDebounceMs = 250,
+            onPersist = { onUpdateOptions(options.copy(apiKey = it)) },
+            normalizeOnBlur = { it.trim() },
         )
     }
 }
@@ -611,12 +613,12 @@ internal fun SerperOptions(
             Text(stringResource(R.string.search_detail_api_key))
         }
     ) {
-        OutlinedTextField(
-            value = options.apiKey,
-            onValueChange = {
-                onUpdateOptions(options.copy(apiKey = it))
-            },
-            modifier = Modifier.fillMaxWidth()
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(options.apiKey),
+            modifier = Modifier.fillMaxWidth(),
+            persistDebounceMs = 250,
+            onPersist = { onUpdateOptions(options.copy(apiKey = it)) },
+            normalizeOnBlur = { it.trim() },
         )
     }
 }
@@ -631,12 +633,12 @@ internal fun MetasoOptions(
             Text(stringResource(R.string.search_detail_api_key))
         }
     ) {
-        OutlinedTextField(
-            value = options.apiKey,
-            onValueChange = {
-                onUpdateOptions(options.copy(apiKey = it))
-            },
-            modifier = Modifier.fillMaxWidth()
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(options.apiKey),
+            modifier = Modifier.fillMaxWidth(),
+            persistDebounceMs = 250,
+            onPersist = { onUpdateOptions(options.copy(apiKey = it)) },
+            normalizeOnBlur = { it.trim() },
         )
     }
 }
@@ -651,12 +653,12 @@ internal fun OllamaOptions(
             Text(stringResource(R.string.search_detail_api_key))
         }
     ) {
-        OutlinedTextField(
-            value = options.apiKey,
-            onValueChange = {
-                onUpdateOptions(options.copy(apiKey = it))
-            },
-            modifier = Modifier.fillMaxWidth()
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(options.apiKey),
+            modifier = Modifier.fillMaxWidth(),
+            persistDebounceMs = 250,
+            onPersist = { onUpdateOptions(options.copy(apiKey = it)) },
+            normalizeOnBlur = { it.trim() },
         )
     }
 }
@@ -671,12 +673,12 @@ internal fun PerplexityOptions(
             Text(stringResource(R.string.search_detail_api_key))
         }
     ) {
-        OutlinedTextField(
-            value = options.apiKey,
-            onValueChange = {
-                onUpdateOptions(options.copy(apiKey = it))
-            },
-            modifier = Modifier.fillMaxWidth()
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(options.apiKey),
+            modifier = Modifier.fillMaxWidth(),
+            persistDebounceMs = 250,
+            onPersist = { onUpdateOptions(options.copy(apiKey = it)) },
+            normalizeOnBlur = { it.trim() },
         )
     }
 
@@ -685,13 +687,13 @@ internal fun PerplexityOptions(
             Text(stringResource(R.string.search_detail_max_tokens))
         }
     ) {
-        OutlinedTextField(
-            value = options.maxTokens?.takeIf { it > 0 }?.toString() ?: "",
-            onValueChange = { value ->
-                onUpdateOptions(options.copy(maxTokens = value.toIntOrNull()))
-            },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(options.maxTokens?.takeIf { it > 0 }?.toString() ?: ""),
             modifier = Modifier.fillMaxWidth(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            persistDebounceMs = 250,
+            onPersist = { text -> onUpdateOptions(options.copy(maxTokens = text.trim().toIntOrNull()?.takeIf { it > 0 })) },
+            normalizeOnBlur = { text -> text.trim().toIntOrNull()?.takeIf { it > 0 }?.toString() ?: "" },
         )
     }
 
@@ -700,13 +702,13 @@ internal fun PerplexityOptions(
             Text(stringResource(R.string.search_detail_max_tokens_per_page))
         }
     ) {
-        OutlinedTextField(
-            value = options.maxTokensPerPage?.takeIf { it > 0 }?.toString() ?: "",
-            onValueChange = { value ->
-                onUpdateOptions(options.copy(maxTokensPerPage = value.toIntOrNull()))
-            },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(options.maxTokensPerPage?.takeIf { it > 0 }?.toString() ?: ""),
             modifier = Modifier.fillMaxWidth(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            persistDebounceMs = 250,
+            onPersist = { text -> onUpdateOptions(options.copy(maxTokensPerPage = text.trim().toIntOrNull()?.takeIf { it > 0 })) },
+            normalizeOnBlur = { text -> text.trim().toIntOrNull()?.takeIf { it > 0 }?.toString() ?: "" },
         )
     }
 }
@@ -721,12 +723,12 @@ internal fun FirecrawlOptions(
             Text(stringResource(R.string.search_detail_api_key))
         }
     ) {
-        OutlinedTextField(
-            value = options.apiKey,
-            onValueChange = {
-                onUpdateOptions(options.copy(apiKey = it))
-            },
-            modifier = Modifier.fillMaxWidth()
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(options.apiKey),
+            modifier = Modifier.fillMaxWidth(),
+            persistDebounceMs = 250,
+            onPersist = { onUpdateOptions(options.copy(apiKey = it)) },
+            normalizeOnBlur = { it.trim() },
         )
     }
 }
@@ -741,12 +743,12 @@ internal fun JinaOptions(
             Text(stringResource(R.string.search_detail_api_key))
         }
     ) {
-        OutlinedTextField(
-            value = options.apiKey,
-            onValueChange = {
-                onUpdateOptions(options.copy(apiKey = it))
-            },
-            modifier = Modifier.fillMaxWidth()
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(options.apiKey),
+            modifier = Modifier.fillMaxWidth(),
+            persistDebounceMs = 250,
+            onPersist = { onUpdateOptions(options.copy(apiKey = it)) },
+            normalizeOnBlur = { it.trim() },
         )
     }
 
@@ -755,15 +757,15 @@ internal fun JinaOptions(
             Text(stringResource(R.string.search_detail_search_url))
         }
     ) {
-        OutlinedTextField(
-            value = options.searchUrl,
-            onValueChange = {
-                onUpdateOptions(options.copy(searchUrl = it.trim()))
-            },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(options.searchUrl),
             modifier = Modifier.fillMaxWidth(),
             placeholder = {
                 Text("https://s.jina.ai/")
-            }
+            },
+            persistDebounceMs = 250,
+            onPersist = { onUpdateOptions(options.copy(searchUrl = it)) },
+            normalizeOnBlur = { it.trim() },
         )
     }
 
@@ -772,15 +774,15 @@ internal fun JinaOptions(
             Text(stringResource(R.string.search_detail_scrape_url))
         }
     ) {
-        OutlinedTextField(
-            value = options.scrapeUrl,
-            onValueChange = {
-                onUpdateOptions(options.copy(scrapeUrl = it.trim()))
-            },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(options.scrapeUrl),
             modifier = Modifier.fillMaxWidth(),
             placeholder = {
                 Text("https://r.jina.ai/")
-            }
+            },
+            persistDebounceMs = 250,
+            onPersist = { onUpdateOptions(options.copy(scrapeUrl = it)) },
+            normalizeOnBlur = { it.trim() },
         )
     }
 }
@@ -795,12 +797,12 @@ internal fun BochaOptions(
             Text(stringResource(R.string.search_detail_api_key))
         }
     ) {
-        OutlinedTextField(
-            value = options.apiKey,
-            onValueChange = {
-                onUpdateOptions(options.copy(apiKey = it))
-            },
-            modifier = Modifier.fillMaxWidth()
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(options.apiKey),
+            modifier = Modifier.fillMaxWidth(),
+            persistDebounceMs = 250,
+            onPersist = { onUpdateOptions(options.copy(apiKey = it)) },
+            normalizeOnBlur = { it.trim() },
         )
     }
 
@@ -832,12 +834,12 @@ internal fun RikkaHubOptions(
             Text(stringResource(R.string.search_detail_api_key))
         }
     ) {
-        OutlinedTextField(
-            value = options.apiKey,
-            onValueChange = {
-                onUpdateOptions(options.copy(apiKey = it))
-            },
-            modifier = Modifier.fillMaxWidth()
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(options.apiKey),
+            modifier = Modifier.fillMaxWidth(),
+            persistDebounceMs = 250,
+            onPersist = { onUpdateOptions(options.copy(apiKey = it)) },
+            normalizeOnBlur = { it.trim() },
         )
     }
 
@@ -875,12 +877,12 @@ internal fun TinyfishOptions(
             Text(stringResource(R.string.search_detail_api_key))
         }
     ) {
-        OutlinedTextField(
-            value = options.apiKey,
-            onValueChange = {
-                onUpdateOptions(options.copy(apiKey = it))
-            },
-            modifier = Modifier.fillMaxWidth()
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(options.apiKey),
+            modifier = Modifier.fillMaxWidth(),
+            persistDebounceMs = 250,
+            onPersist = { onUpdateOptions(options.copy(apiKey = it)) },
+            normalizeOnBlur = { it.trim() },
         )
     }
 }
@@ -895,12 +897,12 @@ internal fun GrokOptions(
             Text(stringResource(R.string.search_detail_api_key))
         }
     ) {
-        OutlinedTextField(
-            value = options.apiKey,
-            onValueChange = {
-                onUpdateOptions(options.copy(apiKey = it))
-            },
-            modifier = Modifier.fillMaxWidth()
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(options.apiKey),
+            modifier = Modifier.fillMaxWidth(),
+            persistDebounceMs = 250,
+            onPersist = { onUpdateOptions(options.copy(apiKey = it)) },
+            normalizeOnBlur = { it.trim() },
         )
     }
 
@@ -909,12 +911,12 @@ internal fun GrokOptions(
             Text(stringResource(R.string.search_detail_model))
         }
     ) {
-        OutlinedTextField(
-            value = options.model,
-            onValueChange = {
-                onUpdateOptions(options.copy(model = it))
-            },
-            modifier = Modifier.fillMaxWidth()
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(options.model),
+            modifier = Modifier.fillMaxWidth(),
+            persistDebounceMs = 250,
+            onPersist = { onUpdateOptions(options.copy(model = it)) },
+            normalizeOnBlur = { it.trim() },
         )
     }
 
@@ -923,12 +925,12 @@ internal fun GrokOptions(
             Text(stringResource(R.string.search_detail_custom_url))
         }
     ) {
-        OutlinedTextField(
-            value = options.customUrl,
-            onValueChange = {
-                onUpdateOptions(options.copy(customUrl = it))
-            },
-            modifier = Modifier.fillMaxWidth()
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(options.customUrl),
+            modifier = Modifier.fillMaxWidth(),
+            persistDebounceMs = 250,
+            onPersist = { onUpdateOptions(options.copy(customUrl = it)) },
+            normalizeOnBlur = { it.trim() },
         )
     }
 
@@ -937,13 +939,13 @@ internal fun GrokOptions(
             Text(stringResource(R.string.search_detail_system_prompt))
         }
     ) {
-        OutlinedTextField(
-            value = options.systemPrompt,
-            onValueChange = {
-                onUpdateOptions(options.copy(systemPrompt = it))
-            },
-            minLines = 3,
-            modifier = Modifier.fillMaxWidth()
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(options.systemPrompt),
+
+            modifier = Modifier.fillMaxWidth(),
+            persistDebounceMs = 250,
+            onPersist = { onUpdateOptions(options.copy(systemPrompt = it)) },
+            normalizeOnBlur = { it.trim() },
         )
     }
 }
@@ -958,38 +960,32 @@ internal fun CustomJsOptions(
             Text(stringResource(R.string.search_detail_name))
         }
     ) {
-        OutlinedTextField(
-            value = options.name,
-            onValueChange = {
-                onUpdateOptions(options.copy(name = it))
-            },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(options.name),
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text(stringResource(R.string.search_detail_custom_search_placeholder)) }
+            placeholder = { Text(stringResource(R.string.search_detail_custom_search_placeholder)) },
+            persistDebounceMs = 250,
+            onPersist = { onUpdateOptions(options.copy(name = it)) },
+            normalizeOnBlur = { it.trim() },
         )
     }
 
-    val highlighter = LocalCodeHighlighter.current
-    val darkMode = LocalDarkMode.current
 
     FormItem(
         label = {
             Text(stringResource(R.string.search_detail_search_script))
         }
     ) {
-        OutlinedTextField(
-            value = options.searchScript,
-            onValueChange = {
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(options.searchScript),
+            modifier = Modifier.fillMaxWidth(),
+            lineLimits = TextFieldLineLimits.MultiLine(minHeightInLines = 8, maxHeightInLines = 20),
+            textStyle = MaterialTheme.typography.bodySmall.merge(fontFamily = JetbrainsMono),
+            persistDebounceMs = 250,
+            onPersist = {
                 onUpdateOptions(options.copy(searchScript = it))
             },
-            modifier = Modifier.fillMaxWidth(),
-            minLines = 8,
-            maxLines = 20,
-            visualTransformation = HighlightCodeVisualTransformation(
-                language = "javascript",
-                highlighter = highlighter,
-                darkMode = darkMode
-            ),
-            textStyle = MaterialTheme.typography.bodySmall.merge(fontFamily = JetbrainsMono),
+            normalizeOnBlur = { it.trim() },
         )
     }
 
@@ -1001,14 +997,10 @@ internal fun CustomJsOptions(
             Text(stringResource(R.string.search_detail_scrape_script_desc))
         }
     ) {
-        OutlinedTextField(
-            value = options.scrapeScript,
-            onValueChange = {
-                onUpdateOptions(options.copy(scrapeScript = it))
-            },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(options.scrapeScript),
             modifier = Modifier.fillMaxWidth(),
-            minLines = 4,
-            maxLines = 20,
+            lineLimits = TextFieldLineLimits.MultiLine(minHeightInLines = 4, maxHeightInLines = 20),
             placeholder = {
                 Text(
                     text = SearchServiceOptions.CustomJsOptions.DEFAULT_SCRAPE_SCRIPT.trimIndent(),
@@ -1016,12 +1008,12 @@ internal fun CustomJsOptions(
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                 )
             },
-            visualTransformation = HighlightCodeVisualTransformation(
-                language = "javascript",
-                highlighter = highlighter,
-                darkMode = darkMode
-            ),
             textStyle = MaterialTheme.typography.bodySmall.merge(fontFamily = JetbrainsMono),
+            persistDebounceMs = 250,
+            onPersist = {
+                onUpdateOptions(options.copy(scrapeScript = it))
+            },
+            normalizeOnBlur = { it.trim() },
         )
     }
 }

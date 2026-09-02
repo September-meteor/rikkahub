@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -14,6 +15,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.ui.FormItem
+import me.rerere.rikkahub.ui.components.ui.ManagedTextField
+import me.rerere.rikkahub.ui.components.ui.rememberSyncedTextFieldState
 import me.rerere.rikkahub.ui.components.ui.OutlinedNumberInput
 import me.rerere.rikkahub.ui.components.ui.SelectTextField
 import me.rerere.tts.provider.TTSProviderSetting
@@ -137,13 +140,12 @@ fun TTSProviderConfigure(
             label = { Text(stringResource(R.string.setting_tts_page_name)) },
             description = { Text(stringResource(R.string.setting_tts_page_name_description)) }
         ) {
-            OutlinedTextField(
-                value = setting.name,
-                onValueChange = { newName ->
-                    onValueChange(setting.copyProvider(name = newName))
-                },
+            ManagedTextField(
+                state = rememberSyncedTextFieldState(setting.name),
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text(stringResource(R.string.setting_tts_page_name_placeholder)) }
+                placeholder = { Text(stringResource(R.string.setting_tts_page_name_placeholder)) },
+                persistDebounceMs = 250,
+                onPersist = { onValueChange(setting.copyProvider(name = it)) },
             )
         }
 
@@ -174,13 +176,12 @@ private fun OpenAITTSConfiguration(
         label = { Text(stringResource(R.string.setting_tts_page_api_key)) },
         description = { Text(stringResource(R.string.setting_tts_page_api_key_description)) }
     ) {
-        OutlinedTextField(
-            value = setting.apiKey,
-            onValueChange = { newApiKey ->
-                onValueChange(setting.copy(apiKey = newApiKey))
-            },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.apiKey),
             modifier = Modifier.fillMaxWidth(),
             placeholder = { Text(stringResource(R.string.setting_tts_page_api_key_placeholder_openai)) },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(apiKey = it)) },
         )
     }
 
@@ -189,13 +190,12 @@ private fun OpenAITTSConfiguration(
         label = { Text(stringResource(R.string.setting_tts_page_base_url)) },
         description = { Text(stringResource(R.string.setting_tts_page_base_url_description)) }
     ) {
-        OutlinedTextField(
-            value = setting.baseUrl,
-            onValueChange = { newBaseUrl ->
-                onValueChange(setting.copy(baseUrl = newBaseUrl))
-            },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.baseUrl),
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text(stringResource(R.string.setting_tts_page_base_url_placeholder)) }
+            placeholder = { Text(stringResource(R.string.setting_tts_page_base_url_placeholder)) },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(baseUrl = it)) },
         )
     }
 
@@ -204,13 +204,12 @@ private fun OpenAITTSConfiguration(
         label = { Text(stringResource(R.string.setting_tts_page_model)) },
         description = { Text(stringResource(R.string.setting_tts_page_model_description)) }
     ) {
-        OutlinedTextField(
-            value = setting.model,
-            onValueChange = { newModel ->
-                onValueChange(setting.copy(model = newModel))
-            },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.model),
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text(stringResource(R.string.setting_tts_page_model_placeholder_openai)) }
+            placeholder = { Text(stringResource(R.string.setting_tts_page_model_placeholder_openai)) },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(model = it)) },
         )
     }
 
@@ -246,13 +245,12 @@ private fun MiMoTTSConfiguration(
         label = { Text(stringResource(R.string.setting_tts_page_api_key)) },
         description = { Text(stringResource(R.string.setting_tts_page_api_key_description)) }
     ) {
-        OutlinedTextField(
-            value = setting.apiKey,
-            onValueChange = { newApiKey ->
-                onValueChange(setting.copy(apiKey = newApiKey))
-            },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.apiKey),
             modifier = Modifier.fillMaxWidth(),
             placeholder = { Text("mimo-xxx") },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(apiKey = it)) },
         )
     }
 
@@ -261,13 +259,12 @@ private fun MiMoTTSConfiguration(
         label = { Text(stringResource(R.string.setting_tts_page_base_url)) },
         description = { Text(stringResource(R.string.setting_tts_page_base_url_description)) }
     ) {
-        OutlinedTextField(
-            value = setting.baseUrl,
-            onValueChange = { newBaseUrl ->
-                onValueChange(setting.copy(baseUrl = newBaseUrl))
-            },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.baseUrl),
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("https://api.xiaomimimo.com/v1") }
+            placeholder = { Text("https://api.xiaomimimo.com/v1") },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(baseUrl = it)) },
         )
     }
 
@@ -276,13 +273,12 @@ private fun MiMoTTSConfiguration(
         label = { Text(stringResource(R.string.setting_tts_page_model)) },
         description = { Text(stringResource(R.string.setting_tts_page_model_description)) }
     ) {
-        OutlinedTextField(
-            value = setting.model,
-            onValueChange = { newModel ->
-                onValueChange(setting.copy(model = newModel))
-            },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.model),
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("mimo-v2-tts") }
+            placeholder = { Text("mimo-v2-tts") },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(model = it)) },
         )
     }
 
@@ -328,12 +324,11 @@ private fun MiniMaxTTSConfiguration(
         label = { Text(stringResource(R.string.setting_tts_page_api_key)) },
         description = { Text(stringResource(R.string.setting_tts_page_api_key_description)) }
     ) {
-        OutlinedTextField(
-            value = setting.apiKey,
-            onValueChange = { newApiKey ->
-                onValueChange(setting.copy(apiKey = newApiKey))
-            },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.apiKey),
             modifier = Modifier.fillMaxWidth(),
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(apiKey = it)) },
         )
     }
 
@@ -342,13 +337,12 @@ private fun MiniMaxTTSConfiguration(
         label = { Text(stringResource(R.string.setting_tts_page_base_url)) },
         description = { Text(stringResource(R.string.setting_tts_page_base_url_description)) }
     ) {
-        OutlinedTextField(
-            value = setting.baseUrl,
-            onValueChange = { newBaseUrl ->
-                onValueChange(setting.copy(baseUrl = newBaseUrl))
-            },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.baseUrl),
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text(stringResource(R.string.setting_tts_page_base_url_placeholder)) }
+            placeholder = { Text(stringResource(R.string.setting_tts_page_base_url_placeholder)) },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(baseUrl = it)) },
         )
     }
 
@@ -357,13 +351,12 @@ private fun MiniMaxTTSConfiguration(
         label = { Text(stringResource(R.string.setting_tts_page_model)) },
         description = { Text(stringResource(R.string.setting_tts_page_model_description)) }
     ) {
-        OutlinedTextField(
-            value = setting.model,
-            onValueChange = { newModel ->
-                onValueChange(setting.copy(model = newModel))
-            },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.model),
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("speech-2.5-hd-preview") }
+            placeholder = { Text("speech-2.5-hd-preview") },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(model = it)) },
         )
     }
 
@@ -427,13 +420,12 @@ private fun GeminiTTSConfiguration(
         label = { Text(stringResource(R.string.setting_tts_page_api_key)) },
         description = { Text(stringResource(R.string.setting_tts_page_api_key_description)) }
     ) {
-        OutlinedTextField(
-            value = setting.apiKey,
-            onValueChange = { newApiKey ->
-                onValueChange(setting.copy(apiKey = newApiKey))
-            },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.apiKey),
             modifier = Modifier.fillMaxWidth(),
             placeholder = { Text(stringResource(R.string.setting_tts_page_api_key_placeholder_gemini)) },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(apiKey = it)) },
         )
     }
 
@@ -442,13 +434,12 @@ private fun GeminiTTSConfiguration(
         label = { Text(stringResource(R.string.setting_tts_page_base_url)) },
         description = { Text(stringResource(R.string.setting_tts_page_base_url_description)) }
     ) {
-        OutlinedTextField(
-            value = setting.baseUrl,
-            onValueChange = { newBaseUrl ->
-                onValueChange(setting.copy(baseUrl = newBaseUrl))
-            },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.baseUrl),
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text(stringResource(R.string.setting_tts_page_base_url_placeholder)) }
+            placeholder = { Text(stringResource(R.string.setting_tts_page_base_url_placeholder)) },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(baseUrl = it)) },
         )
     }
 
@@ -457,13 +448,12 @@ private fun GeminiTTSConfiguration(
         label = { Text(stringResource(R.string.setting_tts_page_model)) },
         description = { Text(stringResource(R.string.setting_tts_page_model_description)) }
     ) {
-        OutlinedTextField(
-            value = setting.model,
-            onValueChange = { newModel ->
-                onValueChange(setting.copy(model = newModel))
-            },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.model),
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text(stringResource(R.string.setting_tts_page_model_placeholder_gemini)) }
+            placeholder = { Text(stringResource(R.string.setting_tts_page_model_placeholder_gemini)) },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(model = it)) },
         )
     }
 
@@ -472,13 +462,12 @@ private fun GeminiTTSConfiguration(
         label = { Text(stringResource(R.string.setting_tts_page_voice_name)) },
         description = { Text(stringResource(R.string.setting_tts_page_voice_name_description)) }
     ) {
-        OutlinedTextField(
-            value = setting.voiceName,
-            onValueChange = { newVoiceName ->
-                onValueChange(setting.copy(voiceName = newVoiceName))
-            },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.voiceName),
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text(stringResource(R.string.setting_tts_page_voice_name_placeholder)) }
+            placeholder = { Text(stringResource(R.string.setting_tts_page_voice_name_placeholder)) },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(voiceName = it)) },
         )
     }
 }
@@ -533,13 +522,12 @@ private fun QwenTTSConfiguration(
         label = { Text(stringResource(R.string.setting_tts_page_api_key)) },
         description = { Text(stringResource(R.string.setting_tts_page_api_key_description)) }
     ) {
-        OutlinedTextField(
-            value = setting.apiKey,
-            onValueChange = { newApiKey ->
-                onValueChange(setting.copy(apiKey = newApiKey))
-            },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.apiKey),
             modifier = Modifier.fillMaxWidth(),
             placeholder = { Text("sk-xxx") },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(apiKey = it)) },
         )
     }
 
@@ -548,13 +536,12 @@ private fun QwenTTSConfiguration(
         label = { Text(stringResource(R.string.setting_tts_page_base_url)) },
         description = { Text(stringResource(R.string.setting_tts_page_base_url_description)) }
     ) {
-        OutlinedTextField(
-            value = setting.baseUrl,
-            onValueChange = { newBaseUrl ->
-                onValueChange(setting.copy(baseUrl = newBaseUrl))
-            },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.baseUrl),
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text(stringResource(R.string.setting_tts_page_base_url_placeholder)) }
+            placeholder = { Text(stringResource(R.string.setting_tts_page_base_url_placeholder)) },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(baseUrl = it)) },
         )
     }
 
@@ -664,13 +651,12 @@ private fun GroqTTSConfiguration(
         label = { Text(stringResource(R.string.setting_tts_page_api_key)) },
         description = { Text(stringResource(R.string.setting_tts_page_api_key_description)) }
     ) {
-        OutlinedTextField(
-            value = setting.apiKey,
-            onValueChange = { newApiKey ->
-                onValueChange(setting.copy(apiKey = newApiKey))
-            },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.apiKey),
             modifier = Modifier.fillMaxWidth(),
             placeholder = { Text("gsk_xxx") },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(apiKey = it)) },
         )
     }
 
@@ -679,13 +665,12 @@ private fun GroqTTSConfiguration(
         label = { Text(stringResource(R.string.setting_tts_page_base_url)) },
         description = { Text(stringResource(R.string.setting_tts_page_base_url_description)) }
     ) {
-        OutlinedTextField(
-            value = setting.baseUrl,
-            onValueChange = { newBaseUrl ->
-                onValueChange(setting.copy(baseUrl = newBaseUrl))
-            },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.baseUrl),
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text(stringResource(R.string.setting_tts_page_base_url_placeholder)) }
+            placeholder = { Text(stringResource(R.string.setting_tts_page_base_url_placeholder)) },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(baseUrl = it)) },
         )
     }
 
@@ -694,13 +679,12 @@ private fun GroqTTSConfiguration(
         label = { Text(stringResource(R.string.setting_tts_page_model)) },
         description = { Text(stringResource(R.string.setting_tts_page_model_description)) }
     ) {
-        OutlinedTextField(
-            value = setting.model,
-            onValueChange = { newModel ->
-                onValueChange(setting.copy(model = newModel))
-            },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.model),
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("canopylabs/orpheus-v1-english") }
+            placeholder = { Text("canopylabs/orpheus-v1-english") },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(model = it)) },
         )
     }
 
@@ -735,13 +719,12 @@ private fun XAITTSConfiguration(
         label = { Text(stringResource(R.string.setting_tts_page_api_key)) },
         description = { Text(stringResource(R.string.setting_tts_page_api_key_description)) }
     ) {
-        OutlinedTextField(
-            value = setting.apiKey,
-            onValueChange = { newApiKey ->
-                onValueChange(setting.copy(apiKey = newApiKey))
-            },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.apiKey),
             modifier = Modifier.fillMaxWidth(),
             placeholder = { Text("xai-xxx") },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(apiKey = it)) },
         )
     }
 
@@ -750,13 +733,12 @@ private fun XAITTSConfiguration(
         label = { Text(stringResource(R.string.setting_tts_page_base_url)) },
         description = { Text(stringResource(R.string.setting_tts_page_base_url_description)) }
     ) {
-        OutlinedTextField(
-            value = setting.baseUrl,
-            onValueChange = { newBaseUrl ->
-                onValueChange(setting.copy(baseUrl = newBaseUrl))
-            },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.baseUrl),
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("https://api.x.ai/v1") }
+            placeholder = { Text("https://api.x.ai/v1") },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(baseUrl = it)) },
         )
     }
 
@@ -838,13 +820,12 @@ private fun ElevenLabsTTSConfiguration(
         label = { Text(stringResource(R.string.setting_tts_page_api_key)) },
         description = { Text(stringResource(R.string.setting_tts_page_api_key_description)) }
     ) {
-        OutlinedTextField(
-            value = setting.apiKey,
-            onValueChange = { newApiKey ->
-                onValueChange(setting.copy(apiKey = newApiKey))
-            },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.apiKey),
             modifier = Modifier.fillMaxWidth(),
             placeholder = { Text("sk_...") },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(apiKey = it)) },
         )
     }
 
@@ -853,13 +834,12 @@ private fun ElevenLabsTTSConfiguration(
         label = { Text(stringResource(R.string.setting_tts_page_base_url)) },
         description = { Text(stringResource(R.string.setting_tts_page_base_url_description)) }
     ) {
-        OutlinedTextField(
-            value = setting.baseUrl,
-            onValueChange = { newBaseUrl ->
-                onValueChange(setting.copy(baseUrl = newBaseUrl))
-            },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.baseUrl),
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("https://api.elevenlabs.io") }
+            placeholder = { Text("https://api.elevenlabs.io") },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(baseUrl = it)) },
         )
     }
 
@@ -893,13 +873,12 @@ private fun ElevenLabsTTSConfiguration(
         label = { Text(stringResource(R.string.setting_tts_page_voice)) },
         description = { Text(stringResource(R.string.setting_tts_page_voice_description)) }
     ) {
-        OutlinedTextField(
-            value = setting.voiceId,
-            onValueChange = { newVoiceId ->
-                onValueChange(setting.copy(voiceId = newVoiceId))
-            },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.voiceId),
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("JBFqnCBsd6RMkjVDRZzb") }
+            placeholder = { Text("JBFqnCBsd6RMkjVDRZzb") },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(voiceId = it)) },
         )
     }
 
@@ -944,13 +923,12 @@ private fun FishAudioTTSConfiguration(
         label = { Text(stringResource(R.string.setting_tts_page_api_key)) },
         description = { Text(stringResource(R.string.setting_tts_page_api_key_description)) }
     ) {
-        OutlinedTextField(
-            value = setting.apiKey,
-            onValueChange = { newApiKey ->
-                onValueChange(setting.copy(apiKey = newApiKey))
-            },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.apiKey),
             modifier = Modifier.fillMaxWidth(),
             placeholder = { Text("https://fish.audio/app/api-keys") },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(apiKey = it)) },
         )
     }
 
@@ -959,13 +937,12 @@ private fun FishAudioTTSConfiguration(
         label = { Text(stringResource(R.string.setting_tts_page_base_url)) },
         description = { Text(stringResource(R.string.setting_tts_page_base_url_description)) }
     ) {
-        OutlinedTextField(
-            value = setting.baseUrl,
-            onValueChange = { newBaseUrl ->
-                onValueChange(setting.copy(baseUrl = newBaseUrl))
-            },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.baseUrl),
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("https://api.fish.audio") }
+            placeholder = { Text("https://api.fish.audio") },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(baseUrl = it)) },
         )
     }
 
@@ -1000,13 +977,12 @@ private fun FishAudioTTSConfiguration(
         label = { Text(stringResource(R.string.setting_tts_page_voice_id)) },
         description = { Text(stringResource(R.string.setting_tts_page_voice_id_description)) }
     ) {
-        OutlinedTextField(
-            value = setting.referenceId,
-            onValueChange = { newReferenceId ->
-                onValueChange(setting.copy(referenceId = newReferenceId))
-            },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.referenceId),
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("802e3bc2b27e49c2995d23ef70e6ac89") }
+            placeholder = { Text("802e3bc2b27e49c2995d23ef70e6ac89") },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(referenceId = it)) },
         )
     }
 
@@ -1051,13 +1027,12 @@ private fun StepTTSConfiguration(
         label = { Text(stringResource(R.string.setting_tts_page_api_key)) },
         description = { Text("从阶跃星辰官网获取密钥: platform.stepfun.com/interface-key") }
     ) {
-        OutlinedTextField(
-            value = setting.apiKey,
-            onValueChange = { newApiKey ->
-                onValueChange(setting.copy(apiKey = newApiKey))
-            },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.apiKey),
             modifier = Modifier.fillMaxWidth(),
             placeholder = { Text("从阶跃星辰官网获取密钥") },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(apiKey = it)) },
         )
     }
 
@@ -1066,13 +1041,12 @@ private fun StepTTSConfiguration(
         label = { Text(stringResource(R.string.setting_tts_page_base_url)) },
         description = { Text(stringResource(R.string.setting_tts_page_base_url_description)) }
     ) {
-        OutlinedTextField(
-            value = setting.baseUrl,
-            onValueChange = { newBaseUrl ->
-                onValueChange(setting.copy(baseUrl = newBaseUrl))
-            },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.baseUrl),
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("https://api.stepfun.com") }
+            placeholder = { Text("https://api.stepfun.com") },
+            persistDebounceMs = 250,
+            onPersist = { onValueChange(setting.copy(baseUrl = it)) },
         )
     }
 
@@ -1235,18 +1209,17 @@ private fun StepTTSConfiguration(
         label = { Text("Instruction") },
         description = { Text("全局语境指令, 仅 stepaudio-2.5-tts 生效 (≤200 字符, 留空不下发)") }
     ) {
-        OutlinedTextField(
-            value = setting.instruction,
-            onValueChange = { newInstruction ->
-                // 服务端上限 200 字符, 客户端做一层保护
-                if (newInstruction.length <= 200) {
-                    onValueChange(setting.copy(instruction = newInstruction))
-                }
-            },
+        ManagedTextField(
+            state = rememberSyncedTextFieldState(setting.instruction),
             modifier = Modifier.fillMaxWidth(),
             placeholder = { Text("例如: 语气温柔, 语速偏慢") },
-            minLines = 2,
-            maxLines = 4,
+            lineLimits = TextFieldLineLimits.MultiLine(minHeightInLines = 2, maxHeightInLines = 4),
+            persistDebounceMs = 250,
+            onPersist = { text ->
+                if (text.length <= 200) {
+                    onValueChange(setting.copy(instruction = text))
+                }
+            },
         )
     }
 }

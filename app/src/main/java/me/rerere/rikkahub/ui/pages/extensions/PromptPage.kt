@@ -36,6 +36,9 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.rememberTextFieldState
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -93,6 +96,8 @@ import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.ExportDialog
 import me.rerere.rikkahub.ui.components.ui.FormItem
+import me.rerere.rikkahub.ui.components.ui.ManagedTextField
+import me.rerere.rikkahub.ui.components.ui.rememberSyncedTextFieldState
 import me.rerere.rikkahub.ui.components.ui.Select
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
@@ -434,11 +439,12 @@ private fun ModeInjectionEditSheet(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                OutlinedTextField(
-                    value = injection.name,
-                    onValueChange = { onEdit(injection.copy(name = it)) },
+                ManagedTextField(
+                    state = rememberSyncedTextFieldState(injection.name),
+                    modifier = Modifier.fillMaxWidth(),
                     label = { Text(stringResource(R.string.prompt_page_name)) },
-                    modifier = Modifier.fillMaxWidth()
+                    persistDebounceMs = 250,
+                    onPersist = { onEdit(injection.copy(name = it)) },
                 )
 
                 FormItem(
@@ -451,14 +457,15 @@ private fun ModeInjectionEditSheet(
                     }
                 )
 
-                OutlinedTextField(
-                    value = injection.priority.toString(),
-                    onValueChange = {
-                        it.toIntOrNull()?.let { p -> onEdit(injection.copy(priority = p)) }
-                    },
-                    label = { Text(stringResource(R.string.prompt_page_priority_label)) },
+                val priorityState = rememberSyncedTextFieldState(injection.priority.toString())
+                ManagedTextField(
+                    state = priorityState,
                     modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    label = { Text(stringResource(R.string.prompt_page_priority_label)) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    persistDebounceMs = 250,
+                    onPersist = { text -> text.toIntOrNull()?.let { p -> onEdit(injection.copy(priority = p)) } },
+                    normalizeOnBlur = { text -> text.toIntOrNull()?.toString() ?: injection.priority.toString() },
                 )
 
                 Text(
@@ -471,14 +478,15 @@ private fun ModeInjectionEditSheet(
                 )
 
                 AnimatedVisibility(visible = injection.position == InjectionPosition.AT_DEPTH) {
-                    OutlinedTextField(
-                        value = injection.injectDepth.toString(),
-                        onValueChange = {
-                            it.toIntOrNull()?.let { d -> onEdit(injection.copy(injectDepth = d)) }
-                        },
-                        label = { Text(stringResource(R.string.prompt_page_inject_depth)) },
+                    val injectDepthState = rememberSyncedTextFieldState(injection.injectDepth.toString())
+                    ManagedTextField(
+                        state = injectDepthState,
                         modifier = Modifier.fillMaxWidth(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        label = { Text(stringResource(R.string.prompt_page_inject_depth)) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        persistDebounceMs = 250,
+                        onPersist = { text -> text.toIntOrNull()?.let { d -> onEdit(injection.copy(injectDepth = d)) } },
+                        normalizeOnBlur = { text -> text.toIntOrNull()?.toString() ?: injection.injectDepth.toString() },
                     )
                 }
 
@@ -495,14 +503,16 @@ private fun ModeInjectionEditSheet(
                     }
                 }
 
-                OutlinedTextField(
-                    value = injection.content,
-                    onValueChange = { onEdit(injection.copy(content = it)) },
-                    label = { Text(stringResource(R.string.prompt_page_injection_content)) },
+                val contentState = rememberSyncedTextFieldState(injection.content)
+                ManagedTextField(
+                    state = contentState,
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(200.dp),
-                    minLines = 5
+                    .fillMaxWidth()
+                    .height(200.dp),
+                    label = { Text(stringResource(R.string.prompt_page_injection_content)) },
+                    lineLimits = TextFieldLineLimits.MultiLine(minHeightInLines = 5),
+                    persistDebounceMs = 250,
+                    onPersist = { onEdit(injection.copy(content = it)) },
                 )
             }
 
@@ -865,18 +875,20 @@ private fun LorebookEditSheet(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                OutlinedTextField(
-                    value = book.name,
-                    onValueChange = { onEdit(book.copy(name = it)) },
+                ManagedTextField(
+                    state = rememberSyncedTextFieldState(book.name),
+                    modifier = Modifier.fillMaxWidth(),
                     label = { Text(stringResource(R.string.prompt_page_name)) },
-                    modifier = Modifier.fillMaxWidth()
+                    persistDebounceMs = 250,
+                    onPersist = { onEdit(book.copy(name = it)) },
                 )
 
-                OutlinedTextField(
-                    value = book.description,
-                    onValueChange = { onEdit(book.copy(description = it)) },
+                ManagedTextField(
+                    state = rememberSyncedTextFieldState(book.description),
+                    modifier = Modifier.fillMaxWidth(),
                     label = { Text(stringResource(R.string.prompt_page_description)) },
-                    modifier = Modifier.fillMaxWidth()
+                    persistDebounceMs = 250,
+                    onPersist = { onEdit(book.copy(description = it)) },
                 )
 
                 FormItem(
@@ -1002,7 +1014,7 @@ private fun RegexInjectionEditDialog(
     onConfirm: () -> Unit,
     onEdit: (PromptInjection.RegexInjection) -> Unit
 ) {
-    var newKeyword by remember { mutableStateOf("") }
+    val newKeywordState = rememberTextFieldState()
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1015,11 +1027,12 @@ private fun RegexInjectionEditDialog(
                     .imePadding(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                OutlinedTextField(
-                    value = entry.name,
-                    onValueChange = { onEdit(entry.copy(name = it)) },
+                ManagedTextField(
+                    state = rememberSyncedTextFieldState(entry.name),
+                    modifier = Modifier.fillMaxWidth(),
                     label = { Text(stringResource(R.string.prompt_page_name)) },
-                    modifier = Modifier.fillMaxWidth()
+                    persistDebounceMs = 250,
+                    onPersist = { onEdit(entry.copy(name = it)) },
                 )
 
                 FormItem(
@@ -1032,14 +1045,15 @@ private fun RegexInjectionEditDialog(
                     }
                 )
 
-                OutlinedTextField(
-                    value = entry.priority.toString(),
-                    onValueChange = {
-                        it.toIntOrNull()?.let { p -> onEdit(entry.copy(priority = p)) }
-                    },
-                    label = { Text(stringResource(R.string.prompt_page_priority_label)) },
+                val priorityState = rememberSyncedTextFieldState(entry.priority.toString())
+                ManagedTextField(
+                    state = priorityState,
                     modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    label = { Text(stringResource(R.string.prompt_page_priority_label)) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    persistDebounceMs = 250,
+                    onPersist = { text -> text.toIntOrNull()?.let { p -> onEdit(entry.copy(priority = p)) } },
+                    normalizeOnBlur = { text -> text.toIntOrNull()?.toString() ?: entry.priority.toString() },
                 )
 
                 Text(
@@ -1052,14 +1066,15 @@ private fun RegexInjectionEditDialog(
                 )
 
                 AnimatedVisibility(visible = entry.position == InjectionPosition.AT_DEPTH) {
-                    OutlinedTextField(
-                        value = entry.injectDepth.toString(),
-                        onValueChange = {
-                            it.toIntOrNull()?.let { d -> onEdit(entry.copy(injectDepth = d)) }
-                        },
-                        label = { Text(stringResource(R.string.prompt_page_inject_depth)) },
+                    val injectDepthState = rememberSyncedTextFieldState(entry.injectDepth.toString())
+                    ManagedTextField(
+                        state = injectDepthState,
                         modifier = Modifier.fillMaxWidth(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        label = { Text(stringResource(R.string.prompt_page_inject_depth)) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        persistDebounceMs = 250,
+                        onPersist = { text -> text.toIntOrNull()?.let { d -> onEdit(entry.copy(injectDepth = d)) } },
+                        normalizeOnBlur = { text -> text.toIntOrNull()?.toString() ?: entry.injectDepth.toString() },
                     )
                 }
 
@@ -1093,17 +1108,17 @@ private fun RegexInjectionEditDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     OutlinedTextField(
-                        value = newKeyword,
-                        onValueChange = { newKeyword = it },
+                        state = newKeywordState,
                         label = { Text(stringResource(R.string.prompt_page_new_keyword)) },
                         modifier = Modifier.weight(1f),
-                        singleLine = true
+                        lineLimits = TextFieldLineLimits.SingleLine
                     )
                     IconButton(
                         onClick = {
-                            if (newKeyword.isNotBlank()) {
-                                onEdit(entry.copy(keywords = entry.keywords + newKeyword.trim()))
-                                newKeyword = ""
+                            val keyword = newKeywordState.text.toString().trim()
+                            if (keyword.isNotBlank()) {
+                                onEdit(entry.copy(keywords = entry.keywords + keyword))
+                                newKeywordState.setTextAndPlaceCursorAtEnd("")
                             }
                         }
                     ) {
@@ -1142,14 +1157,15 @@ private fun RegexInjectionEditDialog(
                     }
                 )
 
-                OutlinedTextField(
-                    value = entry.scanDepth.toString(),
-                    onValueChange = {
-                        it.toIntOrNull()?.let { d -> onEdit(entry.copy(scanDepth = d)) }
-                    },
-                    label = { Text(stringResource(R.string.prompt_page_scan_depth)) },
+                val scanDepthState = rememberSyncedTextFieldState(entry.scanDepth.toString())
+                ManagedTextField(
+                    state = scanDepthState,
                     modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    label = { Text(stringResource(R.string.prompt_page_scan_depth)) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    persistDebounceMs = 250,
+                    onPersist = { text -> text.toIntOrNull()?.let { d -> onEdit(entry.copy(scanDepth = d)) } },
+                    normalizeOnBlur = { text -> text.toIntOrNull()?.toString() ?: entry.scanDepth.toString() },
                 )
 
                 AnimatedVisibility(visible = entry.position.usesStandaloneMessage()) {
@@ -1165,14 +1181,16 @@ private fun RegexInjectionEditDialog(
                     }
                 }
 
-                OutlinedTextField(
-                    value = entry.content,
-                    onValueChange = { onEdit(entry.copy(content = it)) },
-                    label = { Text(stringResource(R.string.prompt_page_injection_content)) },
+                val contentState = rememberSyncedTextFieldState(entry.content)
+                ManagedTextField(
+                    state = contentState,
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(150.dp),
-                    minLines = 4
+                    .fillMaxWidth()
+                    .height(150.dp),
+                    label = { Text(stringResource(R.string.prompt_page_injection_content)) },
+                    lineLimits = TextFieldLineLimits.MultiLine(minHeightInLines = 4),
+                    persistDebounceMs = 250,
+                    onPersist = { onEdit(entry.copy(content = it)) },
                 )
             }
         },
