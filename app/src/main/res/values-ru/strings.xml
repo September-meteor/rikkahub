@@ -256,7 +256,7 @@
   <string name="chat_message_toggle_file_path">Переключить полный путь</string>
   <string name="chat_message_copied_path">Путь скопирован в буфер обмена</string>
   <string name="chat_page_cancel">Отмена</string>
-  <string name="chat_page_check_title_model_settings">Проверьте настройки модели заголовков</string>
+    <string name="chat_page_check_fast_model_settings">Проверьте настройки быстрой модели</string>
   <string name="chat_page_clear_all_errors">Очистить всё</string>
   <string name="chat_page_compress_additional_prompt">Дополнительные инструкции (по желанию)</string>
   <string name="chat_page_compress_additional_prompt_hint">Укажите, что сохранить или на чём сосредоточиться</string>
@@ -1161,7 +1161,7 @@
   <string name="setting_display_page_bubble_opacity_title">Прозрачность пузырьков</string>
   <string name="setting_provider_page_include_history_reasoning">Отправлять историю рассуждений</string>
   <string name="setting_model_page_fast_model">Быстрая модель</string>
-  <string name="setting_model_page_fast_model_desc">Модель для быстрых или фоновых задач, также используется как резервная для моделей заголовков и предложений, если не задана</string>
+    <string name="setting_model_page_fast_model_desc">Модель для заголовков, подсказок в чате и других быстрых или фоновых задач</string>
   <string name="setting_model_page_enable_suggestion">Включить подсказки чата</string>
   <string name="assistant_page_gradient_background">Градиентный фон</string>
   <string name="assistant_page_gradient_background_desc">Использовать динамический градиентный фон на странице чата</string>
@@ -1357,7 +1357,6 @@
   <string name="reasoning_translation_loading">Перевод...</string>
   <string name="safe_mode_enter_app">Войти в приложение</string>
   <string name="setting_tts_page_default_playback_speed">Скорость воспроизведения по умолчанию</string>
-  <string name="setting_tts_page_default_playback_speed_description">Применяется локально ко всем поставщикам TTS, не изменяя их настройки синтеза.</string>
   <string name="setting_tts_page_fish_audio_speed_description">Скорость речи (0.5 - 2.0, 1.0 — нормальная)</string>
   <string name="setting_tts_page_temperature">Температура</string>
   <string name="setting_tts_page_temperature_description">Контроль случайности голоса (0.0 - 1.0, выше — выразительнее)</string>
@@ -1442,4 +1441,9 @@
   <string name="update_card_downloading_via_mirror">Прямое соединение недоступно, переключено на зеркало</string>
   <string name="update_card_downloading_via_mirror_desc">Загрузка через зеркало...</string>
   <string name="update_card_recommended_format">%1$s (рекомендуется)</string>
+  <string name="setting_page_preferences_network_auto_retry">Автоповтор</string>
+  <string name="setting_page_preferences_network_auto_retry_desc">Повторять запросы модели до 3 раз при сетевых ошибках.</string>
+  <string name="setting_tts_page_default_playback_speed_description">Применяется локально к каждому TTS-провайдеру без изменения его настроек синтеза.</string>
+  <string name="search_page_scope_current_assistant">Текущий ассистент</string>
+  <string name="search_page_scope_all_assistants">Все ассистенты</string>
 </resources>

@@ -256,7 +256,7 @@
   <string name="chat_message_toggle_file_path">切換完整路徑</string>
   <string name="chat_message_copied_path">已複製路徑到剪貼簿</string>
   <string name="chat_page_cancel">取消</string>
-  <string name="chat_page_check_title_model_settings">檢查標題模型設定</string>
+    <string name="chat_page_check_fast_model_settings">檢查快速模型設定</string>
   <string name="chat_page_clear_all_errors">清除全部</string>
   <string name="chat_page_compress_additional_prompt">額外指示（選填）</string>
   <string name="chat_page_compress_additional_prompt_hint">指定要保留或聚焦的內容</string>
@@ -1159,7 +1159,7 @@
   <string name="setting_display_page_bubble_opacity_title">氣泡透明度</string>
   <string name="setting_provider_page_include_history_reasoning">回傳歷史思考過程</string>
   <string name="setting_model_page_fast_model">快速模型</string>
-  <string name="setting_model_page_fast_model_desc">用於快速或背景任務的模型，未設置時也作為標題和建議模型的後備。</string>
+    <string name="setting_model_page_fast_model_desc">用於生成標題、聊天建議以及執行其他快速或背景任務</string>
   <string name="setting_model_page_enable_suggestion">啟用聊天建議</string>
   <string name="assistant_page_gradient_background">漸層背景</string>
   <string name="assistant_page_gradient_background_desc">在聊天頁面上使用動態漸變背景</string>
@@ -1355,7 +1355,6 @@
   <string name="reasoning_translation_loading">翻譯中...</string>
   <string name="safe_mode_enter_app">進入應用程式</string>
   <string name="setting_tts_page_default_playback_speed">預設播放速度</string>
-  <string name="setting_tts_page_default_playback_speed_description">在本機套用至每個 TTS 提供者，不會變更其合成設定。</string>
   <string name="setting_tts_page_fish_audio_speed_description">語音速度（0.5 - 2.0，1.0 為正常語速）</string>
   <string name="setting_tts_page_temperature">溫度</string>
   <string name="setting_tts_page_temperature_description">控制語音的隨機性（0.0 - 1.0，越高越有表現力）</string>
@@ -1440,4 +1439,9 @@
   <string name="update_card_downloading_via_mirror">直連不可用，已切換鏡像下載</string>
   <string name="update_card_downloading_via_mirror_desc">正在透過鏡像下載更新包...</string>
   <string name="update_card_recommended_format">%1$s（推薦）</string>
+  <string name="setting_page_preferences_network_auto_retry">自動重試</string>
+  <string name="setting_page_preferences_network_auto_retry_desc">發生網路錯誤時自動重試模型請求，最多重試 3 次。</string>
+  <string name="setting_tts_page_default_playback_speed_description">在本機套用至每個 TTS 提供者，不變更其合成設定。</string>
+  <string name="search_page_scope_current_assistant">目前助手</string>
+  <string name="search_page_scope_all_assistants">全部助手</string>
 </resources>

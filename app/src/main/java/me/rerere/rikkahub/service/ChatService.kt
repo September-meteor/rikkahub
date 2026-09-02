@@ -139,7 +139,7 @@ data class ChatError(
 )
 
 enum class ChatErrorSolution {
-    CheckTitleModelSettings,
+    CheckFastModelSettings,
 }
 
 private val inputTransformers by lazy {
@@ -908,7 +908,7 @@ class ChatService(
 
         runCatching {
             val settings = settingsStore.settingsFlow.first()
-            val model = settings.findModelById(settings.titleModelId, fallback = settings.fastModelId)
+            val model = settings.findModelById(settings.fastModelId)
                 ?: return@runCatching
             val provider = model.findProvider(settings.providers) ?: return@runCatching
 
@@ -923,7 +923,7 @@ class ChatService(
                                 .takeLast(4).joinToString("\n\n") { it.summaryAsText(maxLength = 500) })
                     ),
                 ),
-                params = backgroundTextGenerationParams(model),
+                params = backgroundTextGenerationParams(model, settings.fastModelReasoningLevel),
             )
 
             // 生成完，conversation可能不是最新了，因此需要重新获取
@@ -939,7 +939,7 @@ class ChatService(
                 error = it,
                 conversationId = conversationId,
                 title = context.getString(R.string.error_title_generate_title),
-                solution = ChatErrorSolution.CheckTitleModelSettings,
+                solution = ChatErrorSolution.CheckFastModelSettings,
             )
         }
     }
@@ -953,7 +953,7 @@ class ChatService(
         runCatching {
             val settings = settingsStore.settingsFlow.first()
             if (!settings.enableSuggestion) return@runCatching
-            val model = settings.findModelById(settings.suggestionModelId, fallback = settings.fastModelId)
+            val model = settings.findModelById(settings.fastModelId)
                 ?: return@runCatching
             val provider = model.findProvider(settings.providers) ?: return@runCatching
 
@@ -975,7 +975,7 @@ class ChatService(
                                 .takeLast(8).joinToString("\n\n") { it.summaryAsText(maxLength = 500) }),
                     )
                 ),
-                params = backgroundTextGenerationParams(model),
+                params = backgroundTextGenerationParams(model, settings.fastModelReasoningLevel),
             )
             val suggestions =
                 result.message.toText().split("\n").map { it.trim() }

@@ -35,8 +35,8 @@ android {
         applicationId = "me.rerere.rikkahub"
         minSdk = 26
         targetSdk = 37
-        versionCode = 182
-        versionName = "2.4.15"
+        versionCode = 183
+        versionName = "2.4.16"
 
         buildConfigField("String", "FORK_VERSION_NAME", "\"$forkVersionName\"")
 
