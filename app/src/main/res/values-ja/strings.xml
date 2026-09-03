@@ -297,6 +297,7 @@
   <string name="chat_page_regenerate_title">タイトルを再生成</string>
   <string name="chat_page_save">保存</string>
   <string name="chat_page_scroll_to_bottom">一番下へスクロール</string>
+  <string name="conversation_list_jump_to_current">現在の会話に戻る</string>
   <string name="chat_page_search_chats">チャットを検索</string>
   <string name="chat_page_today">今日</string>
   <string name="chat_page_yesterday">昨日</string>

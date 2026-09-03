@@ -14,9 +14,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
@@ -54,6 +54,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ChartColumn
 import me.rerere.hugeicons.stroke.Delete01
@@ -112,22 +113,93 @@ fun ChatDrawerContent(
     val activity = context as ComponentActivity
     val drawerVm: ChatDrawerVM = koinViewModel(viewModelStoreOwner = activity)
 
-    val conversations = drawerVm.conversations.collectAsLazyPagingItems()
     val folders by drawerVm.folders.collectAsStateWithLifecycle()
     val selectedFolderId by drawerVm.selectedFolderId.collectAsStateWithLifecycle()
-    val conversationListState = rememberLazyListState(
-        initialFirstVisibleItemIndex = drawerVm.scrollIndex,
-        initialFirstVisibleItemScrollOffset = drawerVm.scrollOffset,
-    )
 
-    LaunchedEffect(conversationListState) {
+    // 当前会话归属的助手（抽屉按「助手+分类」区分记忆与列表实例）
+    val listAssistantId = current.assistantId
+
+    // 关键：每个（助手+分类）都创建「全新」的 Paging 流与 LazyPagingItems 实例。
+    // LazyPagingItems 内部按上一次可见项维持锚点，若跨分类/跨助手复用一个实例，
+    // 会把上一个列表的滚动位置带到新列表（例如切回未分类被拖到"8月30"段，
+    // 或切换到另一助手停留在上一助手的日期位置）。重建实例即可从源头消除。
+    val conversationsFlow = remember(listAssistantId, selectedFolderId) {
+        drawerVm.conversationsOf(listAssistantId, selectedFolderId)
+    }
+    val conversations = conversationsFlow.collectAsLazyPagingItems()
+
+    // 列表滚动状态同样按（助手+分类）创建：进入该视图时恢复该视图自己保存的位置
+    val conversationListState = remember(listAssistantId, selectedFolderId) {
+        LazyListState(
+            firstVisibleItemIndex = drawerVm.savedScrollIndex(listAssistantId, selectedFolderId),
+            firstVisibleItemScrollOffset = drawerVm.savedScrollOffset(listAssistantId, selectedFolderId),
+        )
+    }
+
+    // 进入后的"稳定完成"标记：稳定前不保存滚动，避免把加载过程的瞬态位置写进记忆
+    var settleCompleted by remember(listAssistantId, selectedFolderId) { mutableStateOf(false) }
+
+    // 数据加载后把列表定位到正确位置：
+    // 1) 该（助手+分类）有记忆 → 恢复记忆位置（打开抽屉瞬间列表为空、深层位置会被
+    //    压回顶部，等数据到位后再校正一次）；
+    // 2) 从未在该分类滚动过（无记忆）→ 尝试定位到当前打开的会话（把"你在哪"露出来）；
+    // 仅在校正窗口内处理（最多约 600ms），用户一动手立即放手，不做持续轮询；
+    // 分类为空（无数据可等）时 2s 超时兜底直接结束
+    LaunchedEffect(listAssistantId, selectedFolderId, conversationListState) {
+        settleCompleted = false
+        var targetIndex = drawerVm.savedScrollIndex(listAssistantId, selectedFolderId)
+        var targetOffset = drawerVm.savedScrollOffset(listAssistantId, selectedFolderId)
+        if (!drawerVm.hasSavedScrollPosition(listAssistantId, selectedFolderId)) {
+            // 无记忆：定位到当前会话（若它就在本列表且已加载出来）
+            val currentIndex = conversations.itemSnapshotList.items.indexOfFirst {
+                (it as? ConversationListItem.Item)?.conversation?.id == current.id
+            }
+            if (currentIndex >= 0) {
+                targetIndex = currentIndex
+                targetOffset = 0
+            }
+        }
+        withTimeoutOrNull(2000) {
+            snapshotFlow { conversations.itemCount }.first { it > 0 }
+        } ?: run {
+            // 空分类：无内容可定位，直接结束
+            settleCompleted = true
+            return@LaunchedEffect
+        }
+        var stable = 0
+        val deadline = System.currentTimeMillis() + 600
+        while (System.currentTimeMillis() < deadline && stable < 2) {
+            if (conversationListState.isScrollInProgress) {
+                // 用户正在手动滑动：放弃校正，尊重用户操作
+                break
+            }
+            val idx = conversationListState.firstVisibleItemIndex
+            val off = conversationListState.firstVisibleItemScrollOffset
+            if (idx == targetIndex && off == targetOffset) {
+                stable++
+            } else {
+                stable = 0
+                conversationListState.scrollToItem(targetIndex, targetOffset)
+            }
+            delay(50)
+        }
+        settleCompleted = true
+    }
+
+    // 保存滚动位置：绑定到该列表状态所属的（助手+分类），随滚动实时更新。
+    // 稳定期结束前不写入，避免加载过程的瞬态位置污染记忆
+    LaunchedEffect(listAssistantId, selectedFolderId, conversationListState) {
+        val ownerAssistantId = listAssistantId
+        val ownerFolderId = selectedFolderId
         snapshotFlow {
             conversationListState.firstVisibleItemIndex to
                 conversationListState.firstVisibleItemScrollOffset
         }
             .distinctUntilChanged()
             .collectLatest { (index, offset) ->
-                drawerVm.saveScrollPosition(index, offset)
+                if (settleCompleted) {
+                    drawerVm.saveScrollPosition(ownerAssistantId, ownerFolderId, index, offset)
+                }
             }
     }
 
@@ -275,6 +347,9 @@ fun ChatDrawerContent(
                 conversations = conversations,
                 conversationJobs = conversationJobs.keys,
                 listState = conversationListState,
+                categoryKey = selectedFolderId?.toString() ?: "unfiled",
+                // 稳定前隐藏「回到当前会话」按钮，避免切换分类时闪现
+                listSettled = settleCompleted,
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),

@@ -297,6 +297,7 @@
   <string name="chat_page_regenerate_title">Сгенерировать заголовок заново</string>
   <string name="chat_page_save">Сохранить</string>
   <string name="chat_page_scroll_to_bottom">Прокрутить вниз</string>
+  <string name="conversation_list_jump_to_current">Вернуться к текущему диалогу</string>
   <string name="chat_page_search_chats">Поиск чатов</string>
   <string name="chat_page_today">Сегодня</string>
   <string name="chat_page_yesterday">Вчера</string>
