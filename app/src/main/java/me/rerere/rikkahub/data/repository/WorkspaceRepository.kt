@@ -153,7 +153,12 @@ class WorkspaceRepository(
     ): List<WorkspaceFileEntry> = withContext(Dispatchers.IO) {
         val workspace = dao.getById(id) ?: return@withContext emptyList()
         manager.ensureWorkspace(workspace.root)
-        manager.listFiles(workspace.root, path, area)
+        if (area == WorkspaceStorageArea.LINUX) {
+            // rootfs 区：按沙盒内绝对路径浏览（含 /workspace、bind mount 等虚拟目录）
+            manager.listRootfs(workspace.root, path)
+        } else {
+            manager.listFiles(workspace.root, path, area)
+        }
     }
 
     suspend fun readText(
@@ -189,12 +194,21 @@ class WorkspaceRepository(
     ): String = withContext(Dispatchers.IO) {
         val workspace = dao.getById(id) ?: error("Workspace not found: $id")
         manager.ensureWorkspace(workspace.root)
-        val size = manager.fileSize(workspace.root, path, area)
+        // LINUX(rootfs) 区 path 为沙盒内绝对路径（含 /workspace、bind mount），走 rootfs 解析
+        val size = if (area == WorkspaceStorageArea.LINUX) {
+            manager.rootfsFileSize(workspace.root, path)
+        } else {
+            manager.fileSize(workspace.root, path, area)
+        }
         if (size > MAX_PREVIEW_BYTES) {
             throw OversizePreviewException(size)
         }
         val bytes = ByteArrayOutputStream().use { out ->
-            manager.exportFile(workspace.root, path, area, out)
+            if (area == WorkspaceStorageArea.LINUX) {
+                manager.exportRootfsFile(workspace.root, path, out)
+            } else {
+                manager.exportFile(workspace.root, path, area, out)
+            }
             out.toByteArray()
         }
         if (bytes.any { it == 0.toByte() }) {
@@ -263,7 +277,12 @@ class WorkspaceRepository(
         outputStream: OutputStream,
     ) = withContext(Dispatchers.IO) {
         val workspace = dao.getById(id) ?: error("Workspace not found: $id")
-        manager.exportFile(workspace.root, path, area, outputStream)
+        if (area == WorkspaceStorageArea.LINUX) {
+            // rootfs 区 path 为沙盒内绝对路径（含 /workspace、bind mount）
+            manager.exportRootfsFile(workspace.root, path, outputStream)
+        } else {
+            manager.exportFile(workspace.root, path, area, outputStream)
+        }
     }
 
     /** 按 Rootfs 内绝对路径读取文件大小, 支持 /workspace、bind mount 与 Rootfs 内部路径 */
@@ -295,7 +314,22 @@ class WorkspaceRepository(
     ): Boolean {
         val deleted = withContext(Dispatchers.IO) {
             val workspace = dao.getById(id) ?: return@withContext false
-            manager.deleteFile(workspace.root, path, recursive, area)
+            if (area == WorkspaceStorageArea.LINUX) {
+                // rootfs 区 path 为沙盒内绝对路径
+                // 底层对不可删路径（内核伪文件系统 /dev、/proc、/sys、rootfs 根等）
+                // 会抛异常拒绝（require → IllegalArgumentException，error → IllegalStateException）。
+                // UI 已对虚拟条目隐藏删除入口，这里仍接住异常并按“删除失败”返回，
+                // 防止将来绕过 UI 的调用点把异常抛到上层导致崩溃。
+                try {
+                    manager.deleteRootfs(workspace.root, path, recursive)
+                } catch (e: IllegalArgumentException) {
+                    false
+                } catch (e: IllegalStateException) {
+                    false
+                }
+            } else {
+                manager.deleteFile(workspace.root, path, recursive, area)
+            }
         }
         return deleted
     }

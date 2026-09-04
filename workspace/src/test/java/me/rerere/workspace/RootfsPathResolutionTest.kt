@@ -1,6 +1,7 @@
 package me.rerere.workspace
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -124,5 +125,69 @@ class RootfsPathResolutionTest {
             manager.rootfsFileSize(root, "/skills/issue-1561")
         }
         assertEquals("Path is not a file: /skills/issue-1561", error.message)
+    }
+
+    @Test
+    fun listRootfsVirtualRootListsWorkspaceAndBindMounts() {
+        manager = createManager()
+        File(manager.filesDir(root), "readme.md").writeText("hi")
+
+        val entries = manager.listRootfs(root, "")
+        val names = entries.map { it.name }.toSet()
+
+        assertTrue("workspace" in names)
+        assertTrue("skills" in names)
+        assertTrue("upload" in names)
+
+        val workspace = entries.first { it.name == "workspace" }
+        assertTrue(workspace.virtual)
+        assertEquals("/workspace", workspace.path)
+        assertTrue(workspace.isDirectory)
+    }
+
+    @Test
+    fun listRootfsInsideWorkspaceUsesAbsolutePaths() {
+        manager = createManager()
+        File(manager.filesDir(root), "src/Main.kt")
+            .apply { parentFile?.mkdirs() }
+            .writeText("fun main() {}")
+
+        assertTrue(
+            manager.listRootfs(root, "/workspace").any { it.path == "/workspace/src" && it.isDirectory }
+        )
+
+        val srcEntries = manager.listRootfs(root, "/workspace/src")
+        assertEquals(listOf("/workspace/src/Main.kt"), srcEntries.map { it.path })
+    }
+
+    @Test
+    fun listRootfsInsideRootfsInteriorUsesAbsolutePaths() {
+        manager = createManager()
+        File(manager.linuxDir(root), "etc/hostname")
+            .apply { parentFile?.mkdirs() }
+            .writeText("rikkahub\n")
+
+        val entries = manager.listRootfs(root, "/etc")
+        assertTrue(entries.any { it.path == "/etc/hostname" })
+    }
+
+    @Test
+    fun deleteRootfsResolvesAbsolutePath() {
+        manager = createManager()
+        val file = File(manager.linuxDir(root), "root/tmp.txt")
+            .apply { parentFile?.mkdirs() }
+            .apply { writeText("x") }
+
+        assertTrue(manager.deleteRootfs(root, "/root/tmp.txt"))
+        assertFalse(file.exists())
+    }
+
+    @Test
+    fun listRootfsKernelMountsShowAsEmptyDirectories() {
+        manager = createManager()
+        // 内核伪文件系统对 App 进程不可枚举，进入后一律按空目录展示
+        assertTrue(manager.listRootfs(root, "/proc").isEmpty())
+        assertTrue(manager.listRootfs(root, "/dev").isEmpty())
+        assertTrue(manager.listRootfs(root, "/sys").isEmpty())
     }
 }

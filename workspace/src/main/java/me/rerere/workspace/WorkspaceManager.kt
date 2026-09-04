@@ -176,6 +176,95 @@ class WorkspaceManager(
         require(isFile) { "Path is not a file: $path" }
     }
 
+    /** bind mount 表：供 rootfs 虚拟浏览与交互终端生成 -b 参数共用，避免挂载配置漂移 */
+    fun bindMounts(): List<WorkspaceBindMount> = bindMounts
+
+    /**
+     * 按沙盒内绝对路径浏览 rootfs，得到与「终端 ls」一致的视图：
+     * - `/`（[path] 为空串）返回 linux/ 磁盘条目，并叠加虚拟挂载目录
+     *   （/workspace、各 bind mount、存在的内核伪文件系统 /dev /proc /sys）；
+     * - 其它路径经 [resolveRootfsPath] 落到真实宿主目录后枚举，
+     *   返回条目的 [WorkspaceFileEntry.path] 均为沙盒内绝对路径。
+     */
+    fun listRootfs(root: String, path: String = ""): List<WorkspaceFileEntry> {
+        val raw = path.trim().replace('\\', '/')
+        // 内核伪文件系统对 App 进程不可枚举（/dev、/sys 受 SELinux 保护，
+        // /proc 内容为内核特殊文件），文件浏览中一律按空目录展示
+        if (isKernelMountPath(raw)) return emptyList()
+        if (raw.isEmpty() || raw == "/") {
+            val virtual = rootfsVirtualEntries(root)
+            val virtualNames = virtual.mapTo(mutableSetOf()) { it.name }
+            val disk = fileSystem.list(linuxDir(root), "")
+                .filter { it.name !in virtualNames }
+                .map { it.copy(path = "/${it.path}") }
+            return (virtual + disk).sortedWith(ROOTFS_ENTRY_ORDER)
+        }
+        val location = resolveRootfsPath(root, raw)
+        val prefix = rootfsPrefixOf(root, location.rootDir)
+        val base = if (prefix.isEmpty()) "/" else "$prefix/"
+        return fileSystem.list(location.rootDir, location.relativePath)
+            .map { it.copy(path = base + it.path) }
+            .sortedWith(ROOTFS_ENTRY_ORDER)
+    }
+
+    /** rootfs 根目录的虚拟挂载条目（/workspace、bind mount、内核伪文件系统） */
+    private fun rootfsVirtualEntries(root: String): List<WorkspaceFileEntry> {
+        val entries = mutableListOf(
+            WorkspaceFileEntry(
+                path = ROOTFS_WORKSPACE_DIR,
+                name = ROOTFS_WORKSPACE_DIR.trimStart('/'),
+                isDirectory = true,
+                sizeBytes = 0L,
+                updatedAt = filesDir(root).lastModified(),
+                virtual = true,
+            )
+        )
+        bindMounts.forEach { mount ->
+            val target = mount.target.trimEnd('/')
+            if (mount.source.isDirectory) {
+                entries += WorkspaceFileEntry(
+                    path = target,
+                    name = target.substringAfterLast('/'),
+                    isDirectory = true,
+                    sizeBytes = 0L,
+                    updatedAt = mount.source.lastModified(),
+                    virtual = true,
+                )
+            }
+        }
+        KERNEL_FS_MOUNTS.forEach { path ->
+            if (File(path).exists()) {
+                entries += WorkspaceFileEntry(
+                    path = path,
+                    name = path.trimStart('/'),
+                    isDirectory = true,
+                    sizeBytes = 0L,
+                    updatedAt = 0L,
+                    virtual = true,
+                )
+            }
+        }
+        return entries
+    }
+
+    /** 宿主目录对应的沙盒根前缀（files→/workspace、bind mount→目标、linux→空） */
+    private fun rootfsPrefixOf(root: String, hostDir: File): String {
+        if (hostDir.absolutePath == linuxDir(root).absolutePath) return ""
+        if (hostDir.absolutePath == filesDir(root).absolutePath) return ROOTFS_WORKSPACE_DIR
+        bindMounts.firstOrNull { it.source.absolutePath == hostDir.absolutePath }
+            ?.let { return it.target.trimEnd('/') }
+        return ""
+    }
+
+    /** 按沙盒内绝对路径删除（rootfs 浏览用）；内核伪文件系统与工作区根会拒绝 */
+    fun deleteRootfs(root: String, path: String, recursive: Boolean = false): Boolean {
+        require(path.isNotBlank() && path != "/" && path != ROOTFS_WORKSPACE_DIR) {
+            "Refusing to delete rootfs root or workspace root"
+        }
+        val location = resolveRootfsPath(root, path)
+        return fileSystem.delete(location.rootDir, location.relativePath, recursive)
+    }
+
     fun deleteFile(
         root: String,
         path: String,
@@ -302,7 +391,17 @@ class WorkspaceManager(
         /** 由宿主机透传的内核伪文件系统, 只能通过 shell 访问 */
         val KERNEL_FS_MOUNTS = listOf("/dev", "/proc", "/sys")
 
+        /** 路径是否命中内核伪文件系统（/dev、/proc、/sys 及其子路径，只能经终端访问） */
+        fun isKernelMountPath(path: String): Boolean {
+            val normalized = path.trim().trimEnd('/')
+            return KERNEL_FS_MOUNTS.any { normalized == it || normalized.startsWith("$it/") }
+        }
+
         private val ROOT_NAME_REGEX = Regex("[A-Za-z0-9._-]+")
+
+        /** rootfs 浏览条目排序：目录在前，同级按名称（忽略大小写） */
+        private val ROOTFS_ENTRY_ORDER: Comparator<WorkspaceFileEntry> =
+            compareBy<WorkspaceFileEntry> { !it.isDirectory }.thenBy { it.name.lowercase() }
     }
 }
 

@@ -831,7 +831,7 @@ private fun WorkspaceFilesPage(
 
         item {
             WorkspacePathBar(
-                path = state.path,
+                path = displayAreaPath(state.area, state.path),
                 canGoUp = state.path.isNotBlank(),
                 onGoUp = onGoUp,
             )
@@ -913,6 +913,12 @@ private fun WorkspaceAreaSelector(
     }
 }
 
+/** 文件列表顶部显示的路径：FILES 区在沙盒内实际挂载于 /workspace；LINUX 区根为 / */
+private fun displayAreaPath(area: WorkspaceStorageArea, path: String): String = when (area) {
+    WorkspaceStorageArea.FILES -> if (path.isBlank()) "/workspace" else "/workspace/$path"
+    WorkspaceStorageArea.LINUX -> path.ifBlank { "/" }
+}
+
 @Composable
 private fun WorkspacePathBar(
     path: String,
@@ -952,6 +958,8 @@ private fun WorkspaceFileCard(
     onSyncToSource: (() -> Unit)? = null,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
+    // 虚拟挂载目录（如 rootfs 里的 /workspace、/proc）不提供删除/导出等文件操作
+    val showMenuActions = !entry.virtual || onExportDir != null || onSyncToSource != null
 
     Card(
         modifier = Modifier
@@ -995,7 +1003,7 @@ private fun WorkspaceFileCard(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            Box {
+            if (showMenuActions) Box {
                 IconButton(onClick = {
                     menuExpanded = true
                 }) {
@@ -1062,20 +1070,22 @@ private fun WorkspaceFileCard(
                             },
                         )
                     }
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.common_delete), color = MaterialTheme.colorScheme.error) },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = HugeIcons.Delete01,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error,
-                            )
-                        },
-                        onClick = {
-                            menuExpanded = false
-                            onDelete()
-                        },
-                    )
+                    if (!entry.virtual) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.common_delete), color = MaterialTheme.colorScheme.error) },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = HugeIcons.Delete01,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                )
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                onDelete()
+                            },
+                        )
+                    }
                 }
             }
         }

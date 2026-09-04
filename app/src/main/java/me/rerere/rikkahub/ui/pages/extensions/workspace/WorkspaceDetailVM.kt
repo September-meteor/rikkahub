@@ -106,15 +106,21 @@ class WorkspaceDetailVM(
     }
 
     fun goUp() {
-        val path = state.value.path
+        val current = state.value
+        val path = current.path
         if (path.isBlank()) return
-        _state.update {
-            it.copy(
-                path = path.substringBeforeLast('/', missingDelimiterValue = ""),
-                entries = emptyList(),
-                error = null,
-            )
+        val parent = if (current.area == WorkspaceStorageArea.LINUX) {
+            // rootfs 区为沙盒内绝对路径：/a/b -> /a，/a -> 根（空串）
+            val trimmed = path.trimEnd('/')
+            val index = trimmed.lastIndexOf('/')
+            when {
+                index <= 0 -> ""
+                else -> trimmed.substring(0, index)
+            }
+        } else {
+            path.substringBeforeLast('/', missingDelimiterValue = "")
         }
+        _state.update { it.copy(path = parent, entries = emptyList(), error = null) }
         refresh()
     }
 

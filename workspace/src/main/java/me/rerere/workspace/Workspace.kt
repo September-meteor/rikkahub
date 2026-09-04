@@ -49,6 +49,8 @@ data class WorkspaceFileEntry(
     val isDirectory: Boolean,
     val sizeBytes: Long,
     val updatedAt: Long,
+    /** true = 非磁盘真实文件，是挂载/内核等虚拟目录（仅展示/导航用，如 /workspace、/proc） */
+    val virtual: Boolean = false,
 )
 
 data class WorkspaceSearchMatch(

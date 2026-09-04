@@ -18,19 +18,21 @@ import com.termux.view.TerminalViewClient
 import me.rerere.rikkahub.data.files.FileFolders
 import me.rerere.workspace.RootfsPatchOptions
 import me.rerere.workspace.RootfsPatcher
+import me.rerere.workspace.WorkspaceBindMount
+import me.rerere.workspace.WorkspaceManager
 import java.io.File
 
 internal fun createWorkspaceTerminalSession(
     context: Context,
     root: String,
     client: TerminalSessionClient,
+    bindMounts: List<WorkspaceBindMount> = emptyList(),
 ): TerminalSession {
     val appContext = context.applicationContext
     val workspaceDir = File(File(appContext.filesDir, "workspaces"), root)
     val filesDir = File(workspaceDir, "files")
     val linuxDir = File(workspaceDir, "linux")
     val tempDir = File(workspaceDir, "tmp")
-    val skillsDir = File(appContext.filesDir, FileFolders.SKILLS).apply { mkdirs() }
     val nativeLibraryDir = File(appContext.applicationInfo.nativeLibraryDir)
     val proot = File(nativeLibraryDir, "libproot_exec.so")
     val loader = File(nativeLibraryDir, "libproot_loader.so")
@@ -45,10 +47,16 @@ internal fun createWorkspaceTerminalSession(
         WORKSPACE_DIR,
         "-b",
         "${filesDir.absolutePath}:$WORKSPACE_DIR",
-        "-b",
-        "${skillsDir.absolutePath}:$SKILLS_DIR",
     )
-    listOf("/dev", "/proc", "/sys").forEach { path ->
+    // 交互终端与文件工具共用同一份 bind mount 表（skills / upload / tool_outputs…），避免两处漂移
+    bindMounts.forEach { mount ->
+        val source = mount.source.apply { mkdirs() }
+        if (source.exists()) {
+            args += "-b"
+            args += "${source.absolutePath}:${mount.target.trimEnd('/')}"
+        }
+    }
+    WorkspaceManager.KERNEL_FS_MOUNTS.forEach { path ->
         if (File(path).exists()) {
             args += "-b"
             args += path
@@ -314,7 +322,6 @@ internal class WorkspaceTerminalViewClient(
 }
 
 private const val WORKSPACE_DIR = "/workspace"
-private const val SKILLS_DIR = "/skills"
 
 // 一个 URL 最多还原跨越的软换行行数(向上/向下各算), 足够覆盖任意真实 URL
 private const val URL_MAX_WRAP_ROWS = 50

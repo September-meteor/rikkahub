@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.AppScope
+import me.rerere.workspace.WorkspaceManager
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -29,6 +30,7 @@ import java.util.concurrent.atomic.AtomicLong
 class WorkspaceTerminalSessionManager internal constructor(
     context: Context,
     private val appScope: AppScope,
+    private val workspaceManager: WorkspaceManager,
 ) {
     private val appContext = context.applicationContext
     private val workspaceStates = MutableStateFlow<Map<String, WorkspaceTerminalTabsState>>(emptyMap())
@@ -160,6 +162,7 @@ class WorkspaceTerminalSessionManager internal constructor(
                 context = appContext,
                 root = root,
                 client = client,
+                bindMounts = workspaceManager.bindMounts(),
             )
         }.onFailure { error ->
             Log.e(TAG, "Failed to create terminal for workspace $root", error)
