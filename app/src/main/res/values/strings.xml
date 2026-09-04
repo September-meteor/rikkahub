@@ -1406,14 +1406,11 @@
   <string name="setting_update_mirror_desc">Used when direct GitHub download fails. Leave empty to only use direct download.</string>
   <string name="setting_update_mirror_direct">Direct download (no mirror)</string>
   <string name="workspace_detail_import_directory">Import directory</string>
-  <string name="workspace_detail_import_settings">Import Settings</string>
-  <string name="workspace_detail_import_settings_desc">Control filtering behavior during directory import</string>
-  <string name="workspace_detail_enable_gitignore">Recursively parse .gitignore</string>
-  <string name="workspace_detail_enable_gitignore_desc">Automatically skip files and directories ignored in .gitignore during import</string>
+  <string name="workspace_detail_enable_gitignore">Respect .gitignore rules</string>
+  <string name="workspace_detail_enable_gitignore_desc">Import, export and sync all skip files and folders ignored by .gitignore in the scanned directory tree.</string>
   <string name="workspace_detail_custom_ignore">Custom exclusion pattern</string>
   <string name="workspace_detail_custom_ignore_hint">Separate items with commas or line breaks, e.g., node_modules, .git, build</string>
-  <string name="workspace_detail_import_conflict_mode">Overwrite same-name items on upload</string>
-  <string name="workspace_detail_import_conflict_mode_desc">When enabled, uploading always overwrites same-name files/directories (also deleting content absent from the source, respecting exclusion rules). When disabled, a copy is created instead (e.g. name (1)).</string>
+  <string name="workspace_detail_import_conflict_mode">Same-name items</string>
   <string name="workspace_detail_import_preview_title">Import Preview</string>
   <string name="workspace_detail_import_confirm">Import</string>
   <string name="workspace_detail_import_no_changes">No changes to import</string>
@@ -1450,7 +1447,7 @@
   <string name="workspace_detail_sync_check_mode">Sync Check Mode</string>
   <string name="workspace_detail_sync_check_mode_fast">Quick Check</string>
   <string name="workspace_detail_sync_check_mode_accurate">Full Check</string>
-  <string name="workspace_detail_sync_check_mode_fast_desc">Quick check only compares file sizes to detect differences. If content changes are so small that the file size barely changes, they may be missed.</string>
+  <string name="workspace_detail_sync_check_mode_fast_desc">Compares file sizes only, so it is the fastest; small content changes that barely affect the file size may be missed.</string>
   <string name="workspace_detail_sync_scanning_title">Scanning for changes…</string>
   <string name="workspace_detail_sync_scanning_files">Scanned %1$d files</string>
   <string name="workspace_detail_sync_scanning_files_eta">Scanned %1$d/%2$d files (est. %3$s)</string>
@@ -1503,4 +1500,17 @@
   <!-- 图片压缩范围说明 / 思维链复制（无障碍） -->
   <string name="image_compression_range">Range: 512 ~ 8192</string>
   <string name="message_reasoning_copy">Copy reasoning</string>
+
+  <!-- 工作区基础设置卡片：按生效范围分三段（导入/同步回原目录/通用） -->
+  <string name="workspace_detail_transfer_settings">Import, Export &amp; Sync</string>
+  <string name="workspace_detail_transfer_settings_desc">These options control how files are copied between this workspace and external folders, grouped by the action they affect.</string>
+  <string name="workspace_detail_section_import_only">Import only</string>
+  <string name="workspace_detail_section_sync_back_only">Sync back only</string>
+  <string name="workspace_detail_import_conflict_copy">Create copies</string>
+  <string name="workspace_detail_import_conflict_overwrite">Merge &amp; overwrite</string>
+  <string name="workspace_detail_sync_check_mode_accurate_desc">Verifies file contents one by one, so it is the most accurate; large folders may take noticeably longer.</string>
+
+  <!-- 同名内容处理：按当前选项显示的说明 -->
+  <string name="workspace_detail_import_conflict_copy_desc">Keeps existing items; same-name files or folders are saved as new copies such as name (1), without overwriting anything.</string>
+  <string name="workspace_detail_import_conflict_overwrite_desc">Shows a preview of the changes first; once you confirm, it writes over the target and removes items that no longer exist in the source (exclusion rules still apply).</string>
 </resources>

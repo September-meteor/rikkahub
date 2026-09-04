@@ -1370,14 +1370,11 @@
   <string name="setting_tts_page_temperature_description">控制語音的隨機性（0.0 - 1.0，越高越有表現力）</string>
   <string name="theme_name_claude">Claude</string>
   <string name="workspace_detail_import_directory">匯入目錄</string>
-  <string name="workspace_detail_import_settings">匯入設定</string>
-  <string name="workspace_detail_import_settings_desc">控制目錄匯入時的過濾行為</string>
-  <string name="workspace_detail_enable_gitignore">遞迴解析 .gitignore</string>
-  <string name="workspace_detail_enable_gitignore_desc">匯入時自動跳過 .gitignore 中忽略的檔案與目錄</string>
+  <string name="workspace_detail_enable_gitignore">遵循 .gitignore 規則</string>
+  <string name="workspace_detail_enable_gitignore_desc">匯入、匯出與同步都會跳過掃描目錄中被 .gitignore 忽略的檔案與子目錄。</string>
   <string name="workspace_detail_custom_ignore">自訂排除模式</string>
   <string name="workspace_detail_custom_ignore_hint">用逗號或換行分隔項目，例如：node_modules, .git, build</string>
-  <string name="workspace_detail_import_conflict_mode">上傳遇到同名檔案/目錄時覆寫</string>
-  <string name="workspace_detail_import_conflict_mode_desc">開啟後，上傳遇到同名檔案或目錄時一律覆寫（並刪除目標中來源沒有的內容，遵守排除規則）；關閉時建立副本（如 name (1)）</string>
+  <string name="workspace_detail_import_conflict_mode">同名內容處理</string>
   <string name="workspace_detail_import_preview_title">匯入預覽</string>
   <string name="workspace_detail_import_confirm">確認匯入</string>
   <string name="workspace_detail_import_no_changes">沒有需要匯入的變更</string>
@@ -1414,7 +1411,7 @@
   <string name="workspace_detail_sync_check_mode">同步檢查模式</string>
   <string name="workspace_detail_sync_check_mode_fast">快速檢查</string>
   <string name="workspace_detail_sync_check_mode_accurate">完整檢查</string>
-  <string name="workspace_detail_sync_check_mode_fast_desc">快速檢查僅比對檔案大小判斷差異，如果內容變動很小導致檔案大小幾乎不變，可能會誤判。</string>
+  <string name="workspace_detail_sync_check_mode_fast_desc">僅比較檔案大小，速度最快；內容變動很小、檔案大小幾乎不變時可能漏檢。</string>
   <string name="workspace_detail_sync_checking_content">正在驗證內容 %1$d/%2$d</string>
   <string name="workspace_detail_sync_executing_title">正在同步…</string>
   <string name="workspace_detail_sync_scanning_title">正在掃描變更…</string>
@@ -1497,4 +1494,17 @@
   <!-- 圖片壓縮範圍說明 / 思維鏈複製（無障礙） -->
   <string name="image_compression_range">範圍: 512 ~ 8192</string>
   <string name="message_reasoning_copy">複製思維鏈</string>
+
+  <!-- 工作区基础设置卡片：按生效范围分三段（导入/同步回原目录/通用） -->
+  <string name="workspace_detail_transfer_settings">匯入、匯出與同步</string>
+  <string name="workspace_detail_transfer_settings_desc">這些選項控制檔案在工作區與外部目錄之間的複製行為，並依生效範圍分組。</string>
+  <string name="workspace_detail_section_import_only">僅匯入</string>
+  <string name="workspace_detail_section_sync_back_only">僅同步回原目錄</string>
+  <string name="workspace_detail_import_conflict_copy">建立副本</string>
+  <string name="workspace_detail_import_conflict_overwrite">覆寫合併</string>
+  <string name="workspace_detail_sync_check_mode_accurate_desc">逐一校驗檔案內容，最準確；檔案較多時耗時明顯增加。</string>
+
+  <!-- 同名内容处理：按当前选项显示的说明 -->
+  <string name="workspace_detail_import_conflict_copy_desc">保留原內容，同名檔案或目錄會另存為 name (1) 等副本，不會覆寫現有內容。</string>
+  <string name="workspace_detail_import_conflict_overwrite_desc">先顯示變更預覽，確認後才寫入目標，並清理來源中已不存在的項目（排除規則仍然生效）。</string>
 </resources>

@@ -1372,14 +1372,11 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="setting_tts_page_temperature_description">음성의 무작위성 제어 (0.0 - 1.0, 높을수록 더 표현력 풍부)</string>
   <string name="theme_name_claude">Claude</string>
   <string name="workspace_detail_import_directory">디렉터리 가져오기</string>
-  <string name="workspace_detail_import_settings">가져오기 설정</string>
-  <string name="workspace_detail_import_settings_desc">디렉터리 가져오기 중 필터링 동작을 제어합니다</string>
-  <string name="workspace_detail_enable_gitignore">.gitignore 재귀적으로 구문 분석</string>
-  <string name="workspace_detail_enable_gitignore_desc">가져오기 중 .gitignore에서 무시된 파일과 디렉터리를 자동으로 건너뜁니다</string>
+  <string name="workspace_detail_enable_gitignore">.gitignore 규칙 적용</string>
+  <string name="workspace_detail_enable_gitignore_desc">가져오기, 내보내기, 동기화 모두 검사 대상 폴더에서 .gitignore에 무시된 파일과 하위 폴더를 건너뜁니다.</string>
   <string name="workspace_detail_custom_ignore">사용자 지정 제외 패턴</string>
   <string name="workspace_detail_custom_ignore_hint">항목을 쉼표 또는 줄바꿈으로 구분하세요. 예: node_modules, .git, build</string>
-  <string name="workspace_detail_import_conflict_mode">업로드 시 같은 이름의 항목 덮어쓰기</string>
-  <string name="workspace_detail_import_conflict_mode_desc">사용하면 업로드 시 같은 이름의 파일/디렉터리를 항상 덮어씁니다(제외 규칙을 따르며 소스에 없는 내용도 삭제). 사용하지 않으면 복사본을 만듭니다(예: name (1))</string>
+  <string name="workspace_detail_import_conflict_mode">이름이 같은 항목 처리</string>
   <string name="workspace_detail_import_preview_title">가져오기 미리 보기</string>
   <string name="workspace_detail_import_confirm">가져오기</string>
   <string name="workspace_detail_import_no_changes">가져올 변경 사항이 없습니다</string>
@@ -1416,7 +1413,7 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="workspace_detail_sync_check_mode">동기화 확인 모드</string>
   <string name="workspace_detail_sync_check_mode_fast">빠른 확인</string>
   <string name="workspace_detail_sync_check_mode_accurate">전체 확인</string>
-  <string name="workspace_detail_sync_check_mode_fast_desc">빠른 확인은 파일 크기만 비교하여 차이를 감지합니다. 내용 변경이 아주 작아 파일 크기가 거의 변하지 않으면 놓칠 수 있습니다.</string>
+  <string name="workspace_detail_sync_check_mode_fast_desc">파일 크기만 비교하므로 가장 빠르지만, 크기가 거의 변하지 않는 작은 변경은 놓칠 수 있습니다.</string>
   <string name="workspace_detail_sync_checking_content">콘텐츠 확인 중 %1$d/%2$d</string>
   <string name="workspace_detail_sync_executing_title">동기화 중…</string>
   <string name="workspace_detail_sync_scanning_title">변경 사항을 검색하는 중…</string>
@@ -1499,4 +1496,17 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <!-- 이미지 압축 범위 설명 / 추론 내용 복사 (접근성) -->
   <string name="image_compression_range">범위: 512 ~ 8192</string>
   <string name="message_reasoning_copy">추론 내용 복사</string>
+
+  <!-- 工作区基础设置卡片：按生效范围分三段（导入/同步回原目录/通用） -->
+  <string name="workspace_detail_transfer_settings">가져오기, 내보내기 및 동기화</string>
+  <string name="workspace_detail_transfer_settings_desc">이 옵션은 작업 영역과 외부 폴더 사이에서 파일을 복사하는 방식을 제어하며, 영향을 주는 작업별로 그룹화됩니다.</string>
+  <string name="workspace_detail_section_import_only">가져오기 전용</string>
+  <string name="workspace_detail_section_sync_back_only">원래 디렉터리로의 동기화 전용</string>
+  <string name="workspace_detail_import_conflict_copy">복사본 생성</string>
+  <string name="workspace_detail_import_conflict_overwrite">병합 후 덮어쓰기</string>
+  <string name="workspace_detail_sync_check_mode_accurate_desc">파일 내용을 하나씩 검증하므로 가장 정확하지만, 파일이 많으면 시간이 크게 늘어납니다.</string>
+
+  <!-- 同名内容处理：按当前选项显示的说明 -->
+  <string name="workspace_detail_import_conflict_copy_desc">기존 내용을 유지하고, 이름이 같은 파일/폴더는 name (1) 등 복사본으로 저장되며 기존 내용을 덮어쓰지 않습니다.</string>
+  <string name="workspace_detail_import_conflict_overwrite_desc">먼저 변경 미리보기를 보여 준 뒤, 확인하면 대상에 기록하고 원본에 더 이상 없는 항목을 제거합니다(제외 규칙은 여전히 적용됨).</string>
 </resources>

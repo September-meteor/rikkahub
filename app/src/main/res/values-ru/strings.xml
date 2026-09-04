@@ -1372,14 +1372,11 @@
   <string name="setting_tts_page_temperature_description">Контроль случайности голоса (0.0 - 1.0, выше — выразительнее)</string>
   <string name="theme_name_claude">Claude</string>
   <string name="workspace_detail_import_directory">Импортировать папку</string>
-  <string name="workspace_detail_import_settings">Настройки импорта</string>
-  <string name="workspace_detail_import_settings_desc">Управление поведением фильтрации при импорте папки</string>
-  <string name="workspace_detail_enable_gitignore">Рекурсивно анализировать .gitignore</string>
-  <string name="workspace_detail_enable_gitignore_desc">Автоматически пропускать файлы и папки, игнорируемые в .gitignore, при импорте</string>
+  <string name="workspace_detail_enable_gitignore">Учитывать правила .gitignore</string>
+  <string name="workspace_detail_enable_gitignore_desc">Импорт, экспорт и синхронизация пропускают файлы и папки, игнорируемые .gitignore в сканируемом каталоге.</string>
   <string name="workspace_detail_custom_ignore">Пользовательский шаблон исключения</string>
   <string name="workspace_detail_custom_ignore_hint">Разделяйте элементы запятыми или переносами строк, например: node_modules, .git, build</string>
-  <string name="workspace_detail_import_conflict_mode">Перезаписывать одноимённые элементы при загрузке</string>
-  <string name="workspace_detail_import_conflict_mode_desc">При включении загрузка всегда перезаписывает одноимённые файлы/папки (с учётом правил исключения, также удаляя содержимое, отсутствующее в источнике). При выключении создаётся копия (например, name (1))</string>
+  <string name="workspace_detail_import_conflict_mode">Одноимённые элементы</string>
   <string name="workspace_detail_import_preview_title">Предпросмотр импорта</string>
   <string name="workspace_detail_import_confirm">Импорт</string>
   <string name="workspace_detail_import_no_changes">Нет изменений для импорта</string>
@@ -1416,7 +1413,7 @@
   <string name="workspace_detail_sync_check_mode">Режим проверки синхронизации</string>
   <string name="workspace_detail_sync_check_mode_fast">Быстрая проверка</string>
   <string name="workspace_detail_sync_check_mode_accurate">Полная проверка</string>
-  <string name="workspace_detail_sync_check_mode_fast_desc">Быстрая проверка сравнивает только размеры файлов. Если изменения настолько малы, что размер почти не меняется, они могут быть пропущены.</string>
+  <string name="workspace_detail_sync_check_mode_fast_desc">Сравнивает только размеры файлов — самый быстрый способ, но небольшие изменения, почти не влияющие на размер, могут быть пропущены.</string>
   <string name="workspace_detail_sync_checking_content">Проверка содержимого %1$d/%2$d</string>
   <string name="workspace_detail_sync_executing_title">Синхронизация…</string>
   <string name="workspace_detail_sync_scanning_title">Поиск изменений…</string>
@@ -1499,4 +1496,17 @@
   <!-- Диапазон сжатия изображений / Копирование рассуждения (доступность) -->
   <string name="image_compression_range">Диапазон: 512 ~ 8192</string>
   <string name="message_reasoning_copy">Скопировать рассуждение</string>
+
+  <!-- 工作区基础设置卡片：按生效范围分三段（导入/同步回原目录/通用） -->
+  <string name="workspace_detail_transfer_settings">Импорт, экспорт и синхронизация</string>
+  <string name="workspace_detail_transfer_settings_desc">Эти параметры управляют копированием файлов между рабочей областью и внешними папками и сгруппированы по действиям, на которые влияют.</string>
+  <string name="workspace_detail_section_import_only">Только импорт</string>
+  <string name="workspace_detail_section_sync_back_only">Только синхронизация с исходным каталогом</string>
+  <string name="workspace_detail_import_conflict_copy">Создать копии</string>
+  <string name="workspace_detail_import_conflict_overwrite">Объединить и перезаписать</string>
+  <string name="workspace_detail_sync_check_mode_accurate_desc">Проверяет содержимое файлов по отдельности — самый точный режим, но при большом количестве файлов заметно медленнее.</string>
+
+  <!-- 同名内容处理：按当前选项显示的说明 -->
+  <string name="workspace_detail_import_conflict_copy_desc">Сохраняет существующие элементы; одноимённые файлы/папки записываются как копии name (1) и т.д., ничего не перезаписывая.</string>
+  <string name="workspace_detail_import_conflict_overwrite_desc">Сначала показывает предпросмотр изменений; после подтверждения записывает в целевой каталог и удаляет элементы, которых больше нет в исходнике (правила исключений по-прежнему действуют).</string>
 </resources>

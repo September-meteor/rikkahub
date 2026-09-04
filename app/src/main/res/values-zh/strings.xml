@@ -1388,14 +1388,11 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_update_mirror_direct">直连（不使用镜像）</string>
   <string name="reasoning_max">最大</string>
   <string name="workspace_detail_import_directory">导入目录</string>
-  <string name="workspace_detail_import_settings">导入设置</string>
-  <string name="workspace_detail_import_settings_desc">控制目录导入时的过滤行为</string>
-  <string name="workspace_detail_enable_gitignore">递归解析 .gitignore</string>
-  <string name="workspace_detail_enable_gitignore_desc">导入时自动跳过 .gitignore 中忽略的文件和目录</string>
+  <string name="workspace_detail_enable_gitignore">遵循 .gitignore 规则</string>
+  <string name="workspace_detail_enable_gitignore_desc">导入、导出与同步都会跳过扫描目录中被 .gitignore 忽略的文件与子目录。</string>
   <string name="workspace_detail_custom_ignore">自定义排除模式</string>
   <string name="workspace_detail_custom_ignore_hint">用逗号或换行分隔，如: node_modules, .git, build</string>
-  <string name="workspace_detail_import_conflict_mode">上传遇到同名文件/目录时覆盖</string>
-  <string name="workspace_detail_import_conflict_mode_desc">开启后，上传遇到同名文件或目录时总是覆盖（并删除目标中源没有的内容，遵守排除规则）；关闭时创建副本（如 name (1)）</string>
+  <string name="workspace_detail_import_conflict_mode">同名内容处理</string>
   <string name="workspace_detail_import_preview_title">导入预览</string>
   <string name="workspace_detail_import_confirm">确认导入</string>
   <string name="workspace_detail_import_no_changes">没有需要导入的变更</string>
@@ -1432,7 +1429,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="workspace_detail_sync_check_mode">同步检查模式</string>
   <string name="workspace_detail_sync_check_mode_fast">快速检查</string>
   <string name="workspace_detail_sync_check_mode_accurate">完整检查</string>
-  <string name="workspace_detail_sync_check_mode_fast_desc">快速检查仅比对文件大小判断差异，如果内容变动很小导致文件大小几乎不变，可能会误判。</string>
+  <string name="workspace_detail_sync_check_mode_fast_desc">只比较文件大小，速度最快；内容变动很小、文件大小几乎不变时可能漏检。</string>
   <string name="workspace_detail_sync_scanning_title">正在扫描变更…</string>
   <string name="workspace_detail_sync_scanning_files">已扫描 %1$d 个文件</string>
   <string name="workspace_detail_sync_scanning_files_eta">文件已扫描 %1$d/%2$d（预估 %3$s）</string>
@@ -1501,4 +1498,17 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <!-- 图片压缩范围说明 / 思维链复制（无障碍） -->
   <string name="image_compression_range">范围: 512 ~ 8192</string>
   <string name="message_reasoning_copy">复制思维链</string>
+
+  <!-- 工作区基础设置卡片：按生效范围分三段（导入/同步回原目录/通用） -->
+  <string name="workspace_detail_transfer_settings">导入、导出与同步</string>
+  <string name="workspace_detail_transfer_settings_desc">这些选项控制文件在工作区与外部目录之间的复制行为，并按生效范围分组。</string>
+  <string name="workspace_detail_section_import_only">仅导入</string>
+  <string name="workspace_detail_section_sync_back_only">仅同步回原目录</string>
+  <string name="workspace_detail_import_conflict_copy">创建副本</string>
+  <string name="workspace_detail_import_conflict_overwrite">覆盖合并</string>
+  <string name="workspace_detail_sync_check_mode_accurate_desc">逐个校验文件内容，最准确；文件较多时耗时明显增加。</string>
+
+  <!-- 同名内容处理：按当前选项显示的说明 -->
+  <string name="workspace_detail_import_conflict_copy_desc">保留原内容，同名文件或目录会另存为 name (1) 等副本，不会覆盖现有内容。</string>
+  <string name="workspace_detail_import_conflict_overwrite_desc">先展示变更预览，确认后才写入目标，并清理源中已不存在的项（排除规则仍然生效）。</string>
 </resources>

@@ -1372,14 +1372,11 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_tts_page_temperature_description">音声のランダム性を制御（0.0 - 1.0、高いほど表現力豊か）</string>
   <string name="theme_name_claude">Claude</string>
   <string name="workspace_detail_import_directory">ディレクトリをインポート</string>
-  <string name="workspace_detail_import_settings">インポート設定</string>
-  <string name="workspace_detail_import_settings_desc">ディレクトリインポート時のフィルタリング動作を制御</string>
-  <string name="workspace_detail_enable_gitignore">.gitignore を再帰的に解析</string>
-  <string name="workspace_detail_enable_gitignore_desc">インポート時に .gitignore で無視されているファイルやディレクトリを自動的にスキップ</string>
+  <string name="workspace_detail_enable_gitignore">.gitignore に従う</string>
+  <string name="workspace_detail_enable_gitignore_desc">インポート・エクスポート・同期のいずれでも、スキャン対象ディレクトリ内で .gitignore によって無視されたファイルとフォルダーをスキップします。</string>
   <string name="workspace_detail_custom_ignore">カスタム除外パターン</string>
   <string name="workspace_detail_custom_ignore_hint">カンマまたは改行で項目を区切ります。例: node_modules, .git, build</string>
-  <string name="workspace_detail_import_conflict_mode">アップロードで同名の項目を上書き</string>
-  <string name="workspace_detail_import_conflict_mode_desc">有効にすると、アップロード時に同名のファイル/ディレクトリを常に上書きします（除外ルールを尊重し、ソースに存在しない内容も削除）。無効の場合はコピーを作成します（例: name (1)）</string>
+  <string name="workspace_detail_import_conflict_mode">同名アイテムの処理</string>
   <string name="workspace_detail_import_preview_title">インポートのプレビュー</string>
   <string name="workspace_detail_import_confirm">インポート</string>
   <string name="workspace_detail_import_no_changes">インポートする変更はありません</string>
@@ -1416,7 +1413,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="workspace_detail_sync_check_mode">同期チェックモード</string>
   <string name="workspace_detail_sync_check_mode_fast">クイックチェック</string>
   <string name="workspace_detail_sync_check_mode_accurate">完全チェック</string>
-  <string name="workspace_detail_sync_check_mode_fast_desc">クイックチェックはファイルサイズのみを比較して差異を検出します。内容の変更が小さくファイルサイズがほとんど変わらない場合、見逃す可能性があります。</string>
+  <string name="workspace_detail_sync_check_mode_fast_desc">ファイルサイズのみ比較するため最も高速ですが、サイズがほとんど変わらない小さな変更は見逃す可能性があります。</string>
   <string name="workspace_detail_sync_checking_content">コンテンツを検証中 %1$d/%2$d</string>
   <string name="workspace_detail_sync_executing_title">同期中…</string>
   <string name="workspace_detail_sync_scanning_title">変更をスキャン中…</string>
@@ -1499,4 +1496,17 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <!-- 画像圧縮の範囲説明 / 推論内容のコピー（アクセシビリティ） -->
   <string name="image_compression_range">範囲: 512 ~ 8192</string>
   <string name="message_reasoning_copy">推論内容をコピー</string>
+
+  <!-- 工作区基础设置卡片：按生效范围分三段（导入/同步回原目录/通用） -->
+  <string name="workspace_detail_transfer_settings">インポート・エクスポートと同期</string>
+  <string name="workspace_detail_transfer_settings_desc">ワークスペースと外部フォルダーとの間でのファイルコピー動作を制御します。影響する操作ごとにグループ化されています。</string>
+  <string name="workspace_detail_section_import_only">インポートのみ</string>
+  <string name="workspace_detail_section_sync_back_only">元のディレクトリへの同期のみ</string>
+  <string name="workspace_detail_import_conflict_copy">コピーを作成</string>
+  <string name="workspace_detail_import_conflict_overwrite">上書きマージ</string>
+  <string name="workspace_detail_sync_check_mode_accurate_desc">ファイルの内容を 1 件ずつ検証するため最も正確ですが、ファイルが多いと時間がかかります。</string>
+
+  <!-- 同名内容处理：按当前选项显示的说明 -->
+  <string name="workspace_detail_import_conflict_copy_desc">既存の内容を保持し、同名のファイル・フォルダーは name (1) などのコピーとして保存されます。既存の内容は上書きされません。</string>
+  <string name="workspace_detail_import_conflict_overwrite_desc">最初に変更プレビューを表示し、確認後にターゲットへ書き込み、ソース側に存在しなくなった項目を削除します（除外ルールは適用されます）。</string>
 </resources>

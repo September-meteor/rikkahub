@@ -27,6 +27,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -1175,17 +1176,17 @@ private fun WorkspaceImportSettingsCard(
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    text = stringResource(R.string.workspace_detail_import_settings),
+                    text = stringResource(R.string.workspace_detail_transfer_settings),
                     style = MaterialTheme.typography.titleMedium,
                 )
                 Text(
-                    text = stringResource(R.string.workspace_detail_import_settings_desc),
+                    text = stringResource(R.string.workspace_detail_transfer_settings_desc),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
 
-            // .gitignore 开关
+            // .gitignore 开关（通用：导入 / 导出 / 同步都遵循）
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -1212,7 +1213,7 @@ private fun WorkspaceImportSettingsCard(
                 )
             }
 
-            // 自定义排除目录输入框（TextFieldState + 防抖持久化：输入不随 Room 回流，光标稳定）
+            // 自定义排除模式输入框（防抖持久化，光标稳定）
             ManagedTextField(
                 state = customIgnoreState,
                 modifier = Modifier.fillMaxWidth(),
@@ -1224,42 +1225,61 @@ private fun WorkspaceImportSettingsCard(
                 onPersist = onCustomIgnoreChange,
             )
 
-            // 上传冲突处理：同名文件/目录默认行为（关闭 = 创建副本，开启 = 覆盖并同步删除多余内容）
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    Text(
-                        text = stringResource(R.string.workspace_detail_import_conflict_mode),
-                        style = MaterialTheme.typography.bodyMedium,
+            // ---- 仅导入 ----
+            HorizontalDivider()
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = stringResource(R.string.workspace_detail_section_import_only),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    text = stringResource(R.string.workspace_detail_import_conflict_mode),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                val conflictMode = ImportConflictMode.from(workspace?.importConflictMode)
+                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                    val options = listOf(
+                        ImportConflictMode.RENAME to stringResource(R.string.workspace_detail_import_conflict_copy),
+                        ImportConflictMode.OVERWRITE to stringResource(R.string.workspace_detail_import_conflict_overwrite),
                     )
-                    Text(
-                        text = stringResource(R.string.workspace_detail_import_conflict_mode_desc),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    options.forEachIndexed { index, (mode, label) ->
+                        SegmentedButton(
+                            selected = conflictMode == mode,
+                            onClick = { onConflictModeChange(mode) },
+                            shape = SegmentedButtonDefaults.itemShape(index, options.size),
+                            enabled = workspace != null,
+                        ) {
+                            Text(label)
+                        }
+                    }
                 }
-                Switch(
-                    checked = ImportConflictMode.from(workspace?.importConflictMode) == ImportConflictMode.OVERWRITE,
-                    onCheckedChange = { enabled ->
-                        onConflictModeChange(if (enabled) ImportConflictMode.OVERWRITE else ImportConflictMode.RENAME)
-                    },
-                    enabled = workspace != null,
+                Text(
+                    text = stringResource(
+                        if (conflictMode == ImportConflictMode.RENAME) {
+                            R.string.workspace_detail_import_conflict_copy_desc
+                        } else {
+                            R.string.workspace_detail_import_conflict_overwrite_desc
+                        }
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
 
-            // 同步检查模式：快速（仅尺寸）/ 完整（校验内容）
-            val selectedMode = SyncCheckMode.from(workspace?.syncCheckMode)
+            // ---- 仅同步回原目录 ----
+            HorizontalDivider()
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = stringResource(R.string.workspace_detail_section_sync_back_only),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
                 Text(
                     text = stringResource(R.string.workspace_detail_sync_check_mode),
                     style = MaterialTheme.typography.bodyMedium,
                 )
+                val selectedMode = SyncCheckMode.from(workspace?.syncCheckMode)
                 SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                     val options = listOf(
                         SyncCheckMode.FAST to stringResource(R.string.workspace_detail_sync_check_mode_fast),
@@ -1277,7 +1297,13 @@ private fun WorkspaceImportSettingsCard(
                     }
                 }
                 Text(
-                    text = stringResource(R.string.workspace_detail_sync_check_mode_fast_desc),
+                    text = stringResource(
+                        if (selectedMode == SyncCheckMode.FAST) {
+                            R.string.workspace_detail_sync_check_mode_fast_desc
+                        } else {
+                            R.string.workspace_detail_sync_check_mode_accurate_desc
+                        }
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1285,6 +1311,7 @@ private fun WorkspaceImportSettingsCard(
         }
     }
 }
+
 
 private const val DEFAULT_ROOTFS_URL =
     "https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.3-base-arm64.tar.gz"
