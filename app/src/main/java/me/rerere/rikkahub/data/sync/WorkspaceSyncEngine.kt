@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.data.sync
 
+import android.content.ContentResolver
 import android.content.Context
 import android.util.Log
 import android.webkit.MimeTypeMap
@@ -102,6 +103,7 @@ object WorkspaceSyncEngine {
         rules: WorkspaceIgnoreRules,
         withHash: Boolean = true,
         onProgress: suspend (done: Int, total: Int) -> Unit = { _, _ -> },
+        scope: String = "",
     ): InternalScanResult = withContext(Dispatchers.IO) {
         val root = File(filesDir, syncRoot)
         if (!root.isDirectory) return@withContext InternalScanResult(emptyMap(), emptyMap())
@@ -149,7 +151,33 @@ object WorkspaceSyncEngine {
             return subtreeFileCount
         }
 
-        walk(root, "")
+        when {
+            scope.isEmpty() -> walk(root, "")
+            else -> {
+                val scopeFile = File(root, scope)
+                when {
+                    scopeFile.isDirectory -> walk(scopeFile, scope)
+                    scopeFile.isFile -> {
+                        // 单文件范围：只收录目标文件本身（被排除规则忽略的文件不进入结果，
+                        // 上层据此放弃「删除外部文件」的镜像语义，避免误删）
+                        val name = scopeFile.name
+                        val parentKey = scope.substringBeforeLast('/', "")
+                        if (!name.startsWith(".l2s.") && name != ".rikkahub" &&
+                            !rules.shouldIgnore(name, parentKey, false)
+                        ) {
+                            val state = runCatching { fileState(scopeFile, withHash) }.getOrElse { e ->
+                                Log.w(TAG, "scanInternal: 文件「$scope」无法读取，已跳过: $e")
+                                null
+                            }
+                            if (state != null) {
+                                files[scope] = state
+                                onProgress(files.size, UNKNOWN_TOTAL)
+                            }
+                        }
+                    }
+                }
+            }
+        }
         InternalScanResult(files, directories, emptyDirs)
     }
 
@@ -186,6 +214,7 @@ object WorkspaceSyncEngine {
         snapshot: SyncSnapshot?,
         docCache: DocumentCache? = null,
         onProgress: suspend (done: Int, total: Int, totalEstimated: Boolean) -> Unit = { _, _, _ -> },
+        scope: String = "",
     ): ExternalScanResult = withContext(Dispatchers.IO) {
         val resolver = context.contentResolver
         val snapshotFiles = snapshot?.files.orEmpty()
@@ -197,8 +226,14 @@ object WorkspaceSyncEngine {
         // 快照子树文件数（每个目录路径 → 该子树内可见文件总数），用于逐目录修正估计总数
         val snapshotSubtreeCounts = subtreeFileCounts(snapshot)
 
-        // 估计总数：初始 = 快照文件数；扫描中逐目录修正；无快照则保持未知
-        var currentTotal = snapshot?.files?.size ?: UNKNOWN_TOTAL
+        // 估计总数：初始 = 快照文件数；限定范围（scope）时只统计范围内的快照文件；
+        // 扫描中逐目录修正；无快照则保持未知
+        val scopePrefix = if (scope.isEmpty()) "" else "$scope/"
+        var currentTotal = when {
+            snapshot == null -> UNKNOWN_TOTAL
+            scope.isEmpty() -> snapshotFiles.size
+            else -> snapshotFiles.count { it.key.startsWith(scopePrefix) }
+        }
         // 是否已发生偏差修正（true 后 UI 文案从「预估」切到「更新」）
         var corrected = false
         // 每个目录已应用的修正量（自底向上去重：祖先目录的修正要扣除子孙已修正的部分）
@@ -292,7 +327,30 @@ object WorkspaceSyncEngine {
             return subtreeFileCount
         }
 
-        walk(rootDoc, "")
+        when {
+            scope.isEmpty() -> walk(rootDoc, "")
+            else -> {
+                val scopeDoc = docCache?.dirs?.get(scope) ?: resolveDocument(rootDoc, scope)
+                when {
+                    scopeDoc == null -> { /* 外部对应路径不存在：按空目录处理（差异会以 CREATE 呈现） */ }
+                    scopeDoc.isDirectory -> {
+                        loadAncestorGitignores(resolver, rootDoc, scope, rules, docCache)
+                        walk(scopeDoc, scope)
+                    }
+                    scopeDoc.isFile -> {
+                        loadAncestorGitignores(resolver, rootDoc, scope, rules, docCache)
+                        val size = runCatching { scopeDoc.length() }.getOrElse { e ->
+                            Log.w(TAG, "scanExternalFast: 文件「$scope」无法读取，已跳过: $e")
+                            -1L
+                        }
+                        if (size >= 0) {
+                            docCache?.files?.put(scope, scopeDoc)
+                            files[scope] = SyncFileState(size = size, hash = "")
+                        }
+                    }
+                }
+            }
+        }
         ExternalScanResult(files, directories, emptyDirs)
     }
 
@@ -352,6 +410,66 @@ object WorkspaceSyncEngine {
         }
 
         walk(rootDoc, "")
+    }
+
+    /**
+     * 范围扫描前，把 scope 祖先目录链上的 .gitignore 加载进规则（由根目录到 scope 父目录），
+     * 保证范围之外的祖先规则（如项目根的 `build/`）对范围内的内容仍然生效；
+     * 顺带把这些祖先目录写入 [docCache]，供执行阶段复用。
+     */
+    private fun loadAncestorGitignores(
+        resolver: ContentResolver,
+        rootDoc: DocumentFile,
+        scope: String,
+        rules: WorkspaceIgnoreRules,
+        docCache: DocumentCache?,
+    ) {
+        runCatching { rules.loadGitignore(rootDoc, "", resolver) }
+            .onFailure { e ->
+                Log.w(TAG, "loadAncestorGitignores: 加载根 .gitignore 失败，已跳过: $e")
+            }
+        docCache?.dirs?.put("", rootDoc)
+        val parentPath = scope.substringBeforeLast('/', "")
+        var current = rootDoc
+        var key = ""
+        for (seg in parentPath.split('/')) {
+            if (seg.isEmpty()) continue
+            key = if (key.isEmpty()) seg else "$key/$seg"
+            val cached = docCache?.dirs?.get(key)
+            val next = cached ?: current.findFile(seg)
+            if (next == null || !next.isDirectory) return
+            if (cached == null) docCache?.dirs?.put(key, next)
+            runCatching { rules.loadGitignore(next, key, resolver) }
+                .onFailure { e ->
+                    Log.w(TAG, "loadAncestorGitignores: 加载「$key/.gitignore」失败，已跳过: $e")
+                }
+            current = next
+        }
+    }
+
+    /**
+     * 遍历本地目录树加载 .gitignore（与 SAF 侧 [loadGitignoreTree] 同构），
+     * 用于「工作区内容 → SAF」的目录导出：排除行为与导入/同步保持同一套规则。
+     */
+    fun loadLocalGitignoreTree(
+        filesDir: File,
+        syncRoot: String,
+        rules: WorkspaceIgnoreRules,
+    ) {
+        val root = File(filesDir, syncRoot)
+        if (!root.isDirectory) return
+        fun walk(dir: File, parentKey: String) {
+            rules.loadGitignore(dir, parentKey)
+            dir.listFiles().orEmpty().forEach { child ->
+                if (!child.isDirectory) return@forEach
+                val name = runCatching { child.name }.getOrNull() ?: return@forEach
+                if (name.startsWith(".l2s.") || name == ".rikkahub") return@forEach
+                if (rules.shouldIgnore(name, parentKey, true)) return@forEach
+                val key = if (parentKey.isEmpty()) name else "$parentKey/$name"
+                walk(child, key)
+            }
+        }
+        walk(root, "")
     }
 
     /**

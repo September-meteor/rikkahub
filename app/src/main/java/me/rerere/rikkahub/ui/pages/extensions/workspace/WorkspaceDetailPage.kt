@@ -43,6 +43,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,6 +57,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.dokar.sonner.ToastType
 import kotlinx.coroutines.launch
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowTurnBackward
@@ -81,6 +83,7 @@ import me.rerere.rikkahub.ui.components.ui.ImagePreviewDialog
 import me.rerere.rikkahub.ui.components.ui.ManagedTextField
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.context.LocalNavController
+import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.fileSizeToString
 import me.rerere.rikkahub.utils.plus
@@ -106,6 +109,18 @@ fun WorkspaceDetailPage(id: String) {
     var showInstallDialog by remember { mutableStateOf(false) }
     var previewImageUri by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
+    val toaster = LocalToaster.current
+
+    // 目录导出结果提示（成功/失败一次性 toast）
+    LaunchedEffect(state.dirExportNotice) {
+        state.dirExportNotice?.let { msg ->
+            toaster.show(
+                msg,
+                type = if (state.dirExportNoticeError) ToastType.Error else ToastType.Success,
+            )
+            vm.clearDirExportNotice()
+        }
+    }
 
     // 新增：目录选择器（用于导入整个目录）
     val directoryPicker = rememberLauncherForActivityResult(
@@ -149,6 +164,16 @@ fun WorkspaceDetailPage(id: String) {
         if (uri == null) return@rememberLauncherForActivityResult
         val outputStream = context.contentResolver.openOutputStream(uri) ?: return@rememberLauncherForActivityResult
         vm.exportFile(entry, outputStream)
+    }
+
+    // 目录导出：选好目标文件夹后直接开始复制，不再弹多余确认
+    var exportDirTarget by remember { mutableStateOf<WorkspaceFileEntry?>(null) }
+    val exportDirLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree(),
+    ) { treeUri ->
+        val entry = exportDirTarget.also { exportDirTarget = null } ?: return@rememberLauncherForActivityResult
+        if (treeUri == null) return@rememberLauncherForActivityResult
+        vm.exportDirectory(context, entry, treeUri)
     }
 
     BackHandler(enabled = pagerState.currentPage == 1 && state.path.isNotBlank()) {
@@ -204,7 +229,7 @@ fun WorkspaceDetailPage(id: String) {
                 
                         IconButton(
                             onClick = { filePicker.launch(arrayOf("*/*")) },
-                            enabled = state.importProgress == null, // 导入中禁用
+                            enabled = importProgress == null, // 导入中禁用
                         ) {
                             Icon(
                                 HugeIcons.FileImport,
@@ -266,11 +291,8 @@ fun WorkspaceDetailPage(id: String) {
                     contentPadding = PaddingValues(),
                     onSelectArea = vm::selectArea,
                     onGoUp = vm::goUp,
-                    onSyncToSource = { entry ->
-                        // 仅对导入的根目录（已注册同步来源的 syncRoot）提供「导回原处」
-                        if (entry.isDirectory && entry.name in state.syncRoots) {
-                            vm.prepareSyncPreview(context, entry.name)
-                        }
+                    onSyncToSource = { root, scope, scopeIsFile ->
+                        vm.prepareSyncPreview(context, root, scope, scopeIsFile)
                     },
                     onOpen = { entry ->
                         when {
@@ -311,6 +333,10 @@ fun WorkspaceDetailPage(id: String) {
                     onExport = { entry ->
                         exportTarget = entry
                         exportLauncher.launch(entry.name)
+                    },
+                    onExportDir = { entry ->
+                        exportDirTarget = entry
+                        exportDirLauncher.launch(null)
                     },
                     onShare = { entry ->
                         vm.exportToCacheFile(entry, context.cacheDir) { file ->
@@ -381,6 +407,11 @@ fun WorkspaceDetailPage(id: String) {
         }
     }
 
+    // 目录导出：执行中弹窗（与「同步回原目录」执行阶段一致的进度样式）
+    if (state.dirExporting) {
+        WorkspaceDirExportProgressDialog(progress = state.exportProgress)
+    }
+
     // 「导回原处」：同步弹窗（检测中 → 结果确认 → 执行中，同一弹窗内按状态机切换）
     when (state.syncPhase) {
         SyncPhase.SCANNING, SyncPhase.PREVIEW, SyncPhase.EXECUTING -> {
@@ -388,7 +419,9 @@ fun WorkspaceDetailPage(id: String) {
                 phase = state.syncPhase,
                 preview = state.syncPreview,
                 progress = state.syncProgress,
-                onConfirm = { state.activeSyncRoot?.let { vm.confirmSync(context, it) } },
+                onConfirm = {
+                    state.activeSyncRoot?.let { vm.confirmSync(context, it, state.activeSyncScope) }
+                },
                 onCancel = vm::cancelSync,
             )
         }
@@ -776,11 +809,12 @@ private fun WorkspaceFilesPage(
     contentPadding: PaddingValues,
     onSelectArea: (WorkspaceStorageArea) -> Unit,
     onGoUp: () -> Unit,
-    onSyncToSource: (WorkspaceFileEntry) -> Unit,
+    onSyncToSource: (syncRoot: String, scope: String, scopeIsFile: Boolean) -> Unit,
     onOpen: (WorkspaceFileEntry) -> Unit,
     onDelete: (WorkspaceFileEntry) -> Unit,
     onExport: (WorkspaceFileEntry) -> Unit,
     onShare: (WorkspaceFileEntry) -> Unit,
+    onExportDir: (WorkspaceFileEntry) -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -815,24 +849,45 @@ private fun WorkspaceFilesPage(
         }
 
         items(state.entries, key = { "${state.area.name}:${it.path}" }) { entry ->
-            val isSyncRoot = state.area == WorkspaceStorageArea.FILES &&
-                state.path.isBlank() &&
-                entry.isDirectory &&
-                entry.name in state.syncRoots
+            val syncScope = syncScopeOf(state, entry)
             WorkspaceFileCard(
                 entry = entry,
                 onOpen = { onOpen(entry) },
                 onDelete = { onDelete(entry) },
                 onExport = { onExport(entry) },
                 onShare = { onShare(entry) },
-                onSyncToSource = if (isSyncRoot) {
-                    { onSyncToSource(entry) }
+                onExportDir = if (entry.isDirectory && state.area == WorkspaceStorageArea.FILES) {
+                    { onExportDir(entry) }
+                } else {
+                    null
+                },
+                onSyncToSource = if (syncScope != null) {
+                    {
+                        onSyncToSource(syncScope.first, syncScope.second, syncScope.third)
+                    }
                 } else {
                     null
                 },
             )
         }
     }
+}
+
+/**
+ * 判断条目是否属于某个已注册同步来源的导入根目录。
+ * 返回 (syncRoot, scope, scopeIsFile)：
+ * - 顶层导入根目录自身：scope 为空串（走整目录完整同步）
+ * - 根目录内的子目录/文件：scope = 相对根目录的路径（走子范围同步）
+ */
+private fun syncScopeOf(
+    state: WorkspaceDetailState,
+    entry: WorkspaceFileEntry,
+): Triple<String, String, Boolean>? {
+    if (state.area != WorkspaceStorageArea.FILES) return null
+    val top = entry.path.substringBefore('/')
+    if (top.isBlank() || top !in state.syncRoots) return null
+    val scope = entry.path.removePrefix(top).removePrefix("/")
+    return Triple(top, scope, !entry.isDirectory)
 }
 
 @Composable
@@ -892,6 +947,7 @@ private fun WorkspaceFileCard(
     onDelete: () -> Unit,
     onExport: () -> Unit,
     onShare: () -> Unit,
+    onExportDir: (() -> Unit)? = null,
     onSyncToSource: (() -> Unit)? = null,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -939,7 +995,9 @@ private fun WorkspaceFileCard(
                 )
             }
             Box {
-                IconButton(onClick = { menuExpanded = true }) {
+                IconButton(onClick = {
+                    menuExpanded = true
+                }) {
                     Icon(HugeIcons.MoreVertical, contentDescription = null)
                 }
                 DropdownMenu(
@@ -971,6 +1029,20 @@ private fun WorkspaceFileCard(
                             onClick = {
                                 menuExpanded = false
                                 onShare()
+                            },
+                        )
+                    } else if (onExportDir != null) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.common_export)) },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = HugeIcons.FileImport,
+                                    contentDescription = null,
+                                )
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                onExportDir()
                             },
                         )
                     }
@@ -1007,6 +1079,32 @@ private fun WorkspaceFileCard(
             }
         }
     }
+}
+
+@Composable
+private fun WorkspaceDirExportProgressDialog(progress: ExportProgress?) {
+    val p = progress
+    val total = p?.total ?: 0
+    val done = p?.done ?: 0
+    AlertDialog(
+        onDismissRequest = { /* 导出中不可取消 */ },
+        title = { Text(stringResource(R.string.workspace_dir_export_progress)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                LinearProgressIndicator(
+                    progress = { if (total > 0) done.toFloat() / total else 0f },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    text = "$done / $total",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = {},
+        dismissButton = {},
+    )
 }
 
 @Composable

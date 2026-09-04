@@ -2,6 +2,7 @@ package me.rerere.rikkahub.data.sync
 
 import android.content.ContentResolver
 import androidx.documentfile.provider.DocumentFile
+import java.io.File
 
 /**
  * 目录导入 / 同步共用的排除规则。
@@ -47,7 +48,7 @@ class WorkspaceIgnoreRules(
 
     private val gitignoreRules = mutableMapOf<String, MutableList<IgnoreRule>>()
 
-    /** 加载 [dir] 目录下的 .gitignore，规则以 [key]（该目录在遍历中的标识）为索引 */
+    /** 加载 [dir] 目录下的 .gitignore（SAF 侧），规则以 [key]（该目录在遍历中的标识）为索引 */
     fun loadGitignore(
         dir: DocumentFile,
         key: String,
@@ -56,49 +57,63 @@ class WorkspaceIgnoreRules(
         if (!enableGitignore) return
         val gitignoreDoc = dir.findFile(".gitignore")
         if (gitignoreDoc == null || !gitignoreDoc.isFile) return
-        val rules = mutableListOf<IgnoreRule>()
         resolver.openInputStream(gitignoreDoc.uri)
-            ?.bufferedReader()?.useLines { lines ->
-                lines.forEach { line ->
-                    // 去掉 CR（兼容 CRLF），空行跳过
-                    var text = line.trimEnd('\r')
-                    if (text.isBlank()) return@forEach
-                    // 尾随空格默认忽略；以 \ 转义（\ ）时保留一个字面空格
-                    val noTrailingSpaces = text.trimEnd(' ')
-                    text = if (noTrailingSpaces.endsWith("\\") && noTrailingSpaces.length < text.length) {
-                        noTrailingSpaces.dropLast(1) + " "
-                    } else {
-                        noTrailingSpaces
-                    }
-                    // 注释（\# 转义后视为字面量，不以 # 开头，自然跳过此处）
-                    if (text.startsWith("#")) return@forEach
+            ?.bufferedReader()?.useLines { lines -> parseGitignore(lines, key) }
+    }
 
-                    // 否定：! 开头（\! 转义则视为字面量）
-                    val isNegation = text.startsWith("!") && !text.startsWith("\\!")
-                    val rawPattern = if (isNegation) text.substring(1) else text
+    /** 加载 [dir] 目录下的 .gitignore（本地磁盘侧），用于工作区内容导出/复制前的排除剪枝 */
+    fun loadGitignore(
+        dir: File,
+        key: String,
+    ) {
+        if (!enableGitignore) return
+        val gitignoreFile = File(dir, ".gitignore")
+        if (!gitignoreFile.isFile) return
+        gitignoreFile.useLines { lines -> parseGitignore(lines, key) }
+    }
 
-                    // 目录专用：/ 结尾（\/ 转义则视为字面量）
-                    val isDirectoryOnly = rawPattern.endsWith("/") && !rawPattern.endsWith("\\/")
-                    val cleanPattern = if (isDirectoryOnly) rawPattern.dropLast(1) else rawPattern
-
-                    // 锚定：/ 开头（\/ 转义则视为字面量）
-                    val isAnchored = cleanPattern.startsWith("/") && !cleanPattern.startsWith("\\/")
-                    val patternText = if (isAnchored) cleanPattern.substring(1) else cleanPattern
-
-                    val regex = globToRegex(patternText) ?: return@forEach
-                    rules.add(
-                        IgnoreRule(
-                            regex = regex,
-                            isNegation = isNegation,
-                            isAnchored = isAnchored,
-                            isDirectoryOnly = isDirectoryOnly,
-                            rawPattern = patternText,
-                            baseKey = key,
-                            isPathPattern = hasUnescapedSlash(patternText),
-                        )
-                    )
-                }
+    /** 解析 .gitignore 内容并挂到 [key] 目录索引下（与 git 对齐的语义见文件头注释） */
+    private fun parseGitignore(lines: Sequence<String>, key: String) {
+        val rules = mutableListOf<IgnoreRule>()
+        lines.forEach { line ->
+            // 去掉 CR（兼容 CRLF），空行跳过
+            var text = line.trimEnd('\r')
+            if (text.isBlank()) return@forEach
+            // 尾随空格默认忽略；以 \ 转义（\ ）时保留一个字面空格
+            val noTrailingSpaces = text.trimEnd(' ')
+            text = if (noTrailingSpaces.endsWith("\\") && noTrailingSpaces.length < text.length) {
+                noTrailingSpaces.dropLast(1) + " "
+            } else {
+                noTrailingSpaces
             }
+            // 注释（\# 转义后视为字面量，不以 # 开头，自然跳过此处）
+            if (text.startsWith("#")) return@forEach
+
+            // 否定：! 开头（\! 转义则视为字面量）
+            val isNegation = text.startsWith("!") && !text.startsWith("\\!")
+            val rawPattern = if (isNegation) text.substring(1) else text
+
+            // 目录专用：/ 结尾（\/ 转义则视为字面量）
+            val isDirectoryOnly = rawPattern.endsWith("/") && !rawPattern.endsWith("\\/")
+            val cleanPattern = if (isDirectoryOnly) rawPattern.dropLast(1) else rawPattern
+
+            // 锚定：/ 开头（\/ 转义则视为字面量）
+            val isAnchored = cleanPattern.startsWith("/") && !cleanPattern.startsWith("\\/")
+            val patternText = if (isAnchored) cleanPattern.substring(1) else cleanPattern
+
+            val regex = globToRegex(patternText) ?: return@forEach
+            rules.add(
+                IgnoreRule(
+                    regex = regex,
+                    isNegation = isNegation,
+                    isAnchored = isAnchored,
+                    isDirectoryOnly = isDirectoryOnly,
+                    rawPattern = patternText,
+                    baseKey = key,
+                    isPathPattern = hasUnescapedSlash(patternText),
+                )
+            )
+        }
         if (rules.isNotEmpty()) {
             gitignoreRules.getOrPut(key) { mutableListOf() }.addAll(rules)
         }

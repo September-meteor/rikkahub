@@ -178,8 +178,9 @@ class WorkspaceRepository(
 
     /**
      * 读取文本用于应用内预览/编辑, 支持两个存储区.
-     * FILES 区走 [WorkspaceManager.readText] (自带大小保护); LINUX 区通过 exportFile 读入内存,
-     * 因此这里对 LINUX 区显式做大小限制, 避免大文件撑爆内存.
+     * 统一按原始字节读取并做「尽力而为」的文本判定：含 NUL 字节（基本可断定非文本）时
+     * 抛 [BinaryPreviewException]，由编辑器页展示「用其它应用打开」兜底；
+     * 文本解码使用 UTF-8 宽松替换（与先前行为一致），不因个别非法字节中断。
      */
     suspend fun readTextForPreview(
         id: String,
@@ -188,19 +189,18 @@ class WorkspaceRepository(
     ): String = withContext(Dispatchers.IO) {
         val workspace = dao.getById(id) ?: error("Workspace not found: $id")
         manager.ensureWorkspace(workspace.root)
-        when (area) {
-            WorkspaceStorageArea.FILES -> manager.readText(workspace.root, path)
-            WorkspaceStorageArea.LINUX -> {
-                val size = manager.fileSize(workspace.root, path, area)
-                require(size <= MAX_PREVIEW_BYTES) {
-                    "文件过大, 无法预览 (${size} bytes)"
-                }
-                ByteArrayOutputStream().use { out ->
-                    manager.exportFile(workspace.root, path, area, out)
-                    out.toString(Charsets.UTF_8.name())
-                }
-            }
+        val size = manager.fileSize(workspace.root, path, area)
+        if (size > MAX_PREVIEW_BYTES) {
+            throw OversizePreviewException(size)
         }
+        val bytes = ByteArrayOutputStream().use { out ->
+            manager.exportFile(workspace.root, path, area, out)
+            out.toByteArray()
+        }
+        if (bytes.any { it == 0.toByte() }) {
+            throw BinaryPreviewException()
+        }
+        bytes.toString(Charsets.UTF_8)
     }
 
     suspend fun importFile(
@@ -493,3 +493,10 @@ class WorkspaceRepository(
         private const val MAX_PREVIEW_BYTES = 512L * 1024
     }
 }
+
+/** 打开的文件疑似二进制、非文本内容时抛出；编辑器页据此展示本地化提示并兜底「用其它应用打开」 */
+class BinaryPreviewException : Exception("File content is not plain text (likely binary)")
+
+/** 文件超过内置文本预览上限时抛出（携带字节数），编辑器页据此展示本地化提示 */
+class OversizePreviewException(val sizeBytes: Long) :
+    Exception("File is too large for in-app text preview: $sizeBytes bytes")

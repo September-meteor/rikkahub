@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.OutputStream
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.data.sync.DocumentCache
@@ -798,7 +799,12 @@ class WorkspaceDetailVM(
      * 若原始目录权限失效或未导入目录，置 [WorkspaceDetailState.syncSourceLostFor]，
      * 由 UI 层引导重新选择目录。
      */
-    fun prepareSyncPreview(context: Context, syncRoot: String) {
+    fun prepareSyncPreview(
+        context: Context,
+        syncRoot: String,
+        scope: String = "",
+        scopeIsFile: Boolean = false,
+    ) {
         syncJob?.cancel()
         syncJob = viewModelScope.launch(Dispatchers.IO) {
             val workspace = repository.getById(id) ?: return@launch
@@ -861,6 +867,7 @@ class WorkspaceDetailVM(
                             rules = rules,
                             snapshot = snapshot,
                             docCache = docCache,
+                            scope = scope,
                             onProgress = { done, total, totalEstimated ->
                                 lastDone = done
                                 scanTotal = total
@@ -882,6 +889,7 @@ class WorkspaceDetailVM(
                             syncRoot = syncRoot,
                             rules = rules,
                             withHash = mode == SyncCheckMode.ACCURATE,
+                            scope = scope,
                             onProgress = { done, total ->
                                 emitSyncProgress(SyncProgressStage.SCAN_INTERNAL, done, total)
                             },
@@ -906,11 +914,21 @@ class WorkspaceDetailVM(
                         },
                     )
                 }
-                SyncPreviewResult(syncRoot, preview)
+                // 单文件范围不做镜像删除：目标文件在本地必然存在，若因被排除规则忽略导致
+                // 内部侧为空，也不应把外部同路径文件删掉（本地并非有意删除它）
+                val effectivePreview = if (scopeIsFile) {
+                    preview.filterNot {
+                        it.type == SyncPreviewType.DELETE || it.type == SyncPreviewType.DELETE_DIR
+                    }
+                } else {
+                    preview
+                }
+                SyncPreviewResult(syncRoot, effectivePreview)
             }.onSuccess { result ->
                 _state.update {
                     it.copy(
                         activeSyncRoot = result.syncRoot,
+                        activeSyncScope = scope,
                         syncPreview = result.preview,
                         syncPhase = SyncPhase.PREVIEW,
                         syncProgress = null,
@@ -933,7 +951,7 @@ class WorkspaceDetailVM(
     }
 
     /** 用户确认后真正执行同步写入，完成后更新快照 */
-    fun confirmSync(context: Context, syncRoot: String) {
+    fun confirmSync(context: Context, syncRoot: String, scope: String = "") {
         val preview = state.value.syncPreview ?: return
         if (preview.isEmpty()) {
             _state.update { it.copy(syncPhase = SyncPhase.IDLE, syncPreview = null) }
@@ -972,10 +990,6 @@ class WorkspaceDetailVM(
                     }
                 val filesDir = repository.workspaceFilesDir(id) ?: error("工作区文件目录不可用")
 
-                val internal = stageCatching(SyncStage.SCAN_INTERNAL) {
-                    WorkspaceSyncEngine.scanInternal(filesDir, syncRoot, rules)
-                }
-
                 // 执行写入（先删后写，复用缓存定位文件/目录，带进度回调）
                 stageCatching(SyncStage.EXECUTE) {
                     WorkspaceSyncEngine.execute(
@@ -992,17 +1006,24 @@ class WorkspaceDetailVM(
                     )
                 }
 
-                // 写入完成后，把当前内部状态 A 重新写入快照（含目录指纹，供下次指纹短路）
-                repository.writeSyncSnapshot(
-                    id,
-                    syncRoot,
-                    SyncSnapshot(
-                        syncRoot = syncRoot,
-                        createdAt = System.currentTimeMillis(),
-                        files = internal.files,
-                        directories = internal.directories,
-                    ),
-                )
+                // 写入完成后，把当前内部状态 A 重新写入快照（含目录指纹，供下次指纹短路）。
+                // 子范围同步不更新快照：快照代表整棵 syncRoot 的同步状态，
+                // 局部回写后仍由下一次整目录同步负责重新比对。
+                if (scope.isEmpty()) {
+                    val internal = stageCatching(SyncStage.SCAN_INTERNAL) {
+                        WorkspaceSyncEngine.scanInternal(filesDir, syncRoot, rules)
+                    }
+                    repository.writeSyncSnapshot(
+                        id,
+                        syncRoot,
+                        SyncSnapshot(
+                            syncRoot = syncRoot,
+                            createdAt = System.currentTimeMillis(),
+                            files = internal.files,
+                            directories = internal.directories,
+                        ),
+                    )
+                }
             }.onSuccess {
                 _state.update {
                     it.copy(syncPhase = SyncPhase.IDLE, syncProgress = null, syncPreview = null, syncError = null)
@@ -1032,6 +1053,7 @@ class WorkspaceDetailVM(
                 syncProgress = null,
                 syncError = null,
                 activeSyncRoot = null,
+                activeSyncScope = "",
             )
         }
     }
@@ -1155,6 +1177,113 @@ class WorkspaceDetailVM(
                 _state.update { it.copy(error = error.message ?: "导出文件失败") }
             }
         }
+    }
+
+    // ---- 目录导出到任意 SAF 位置（仅复制，不做镜像删除） ----
+
+    /**
+     * 用户选定目标文件夹后直接开始导出：无确认弹窗；复制期间以进度弹窗反馈，
+     * 完成/失败以一次性 toast 提示。
+     * - 同名处理：目标文件夹内无同名建原名目录，有同名递增建副本（绝不覆盖）
+     * - 排除规则与导入一致：.gitignore 从源目录树加载 + 工作区自定义排除模式
+     */
+    fun exportDirectory(context: Context, entry: WorkspaceFileEntry, treeUri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            // 弹窗只在真正复制文件时出现（只含确定进度，无“扫描”阶段）
+            _state.update { it.copy(dirExportNotice = null) }
+            runCatching {
+                val workspace = repository.getById(id)
+                    ?: error(appContext.getString(R.string.workspace_dir_export_workspace_missing))
+                val filesDir = repository.workspaceFilesDir(id)
+                    ?: error(appContext.getString(R.string.workspace_dir_export_files_dir_unavailable))
+                val rules = WorkspaceIgnoreRules(
+                    workspace.enableGitignore,
+                    workspace.customIgnorePatterns,
+                )
+                WorkspaceSyncEngine.loadLocalGitignoreTree(filesDir, entry.path, rules)
+                val internal = WorkspaceSyncEngine.scanInternal(
+                    filesDir = filesDir,
+                    syncRoot = entry.path,
+                    rules = rules,
+                    withHash = false,
+                )
+                val items = buildList {
+                    internal.files.keys.sorted().forEach { path ->
+                        add(SyncPreviewItem(type = SyncPreviewType.CREATE, path = path))
+                    }
+                    internal.emptyDirs.sorted().forEach { path ->
+                        add(SyncPreviewItem(type = SyncPreviewType.CREATE_DIR, path = path))
+                    }
+                }
+                val container = DocumentFile.fromTreeUri(context, treeUri)
+                    ?: error(appContext.getString(R.string.workspace_dir_export_dest_unreachable))
+                val finalName = resolveSafCopyName(container, entry.name)
+                val destDir = container.createDirectory(finalName)
+                    ?: error(
+                        appContext.getString(
+                            R.string.workspace_dir_export_dest_create_failed,
+                            finalName,
+                        )
+                    )
+                val total = items.size
+                if (total > 0) {
+                    _state.update {
+                        it.copy(
+                            dirExporting = true,
+                            exportProgress = ExportProgress(done = 0, total = total),
+                        )
+                    }
+                    WorkspaceSyncEngine.execute(
+                        context = context,
+                        rootDoc = destDir,
+                        preview = items,
+                        syncRoot = entry.path,
+                        repository = repository,
+                        id = id,
+                        onProgress = { done, doneTotal ->
+                            _state.update { it.copy(exportProgress = ExportProgress(done = done, total = doneTotal)) }
+                        },
+                    )
+                }
+                finalName
+            }.onSuccess { finalName ->
+                _state.update {
+                    it.copy(
+                        dirExporting = false,
+                        exportProgress = null,
+                        dirExportNotice = appContext.getString(
+                            R.string.workspace_dir_export_success,
+                            finalName,
+                        ),
+                        dirExportNoticeError = false,
+                    )
+                }
+            }.onFailure { error ->
+                _state.update {
+                    it.copy(
+                        dirExporting = false,
+                        exportProgress = null,
+                        dirExportNotice = error.message
+                            ?: appContext.getString(R.string.workspace_dir_export_failed),
+                        dirExportNoticeError = true,
+                    )
+                }
+                Log.e(TAG, "目录导出失败: $error", error)
+            }
+        }
+    }
+
+    /** 消费目录导出结果提示（一次性 toast） */
+    fun clearDirExportNotice() {
+        _state.update { it.copy(dirExportNotice = null) }
+    }
+
+    /** SAF 容器下查找不冲突的名称：原名 / name (1) / name (2)…（与导入副本语义一致） */
+    private fun resolveSafCopyName(container: DocumentFile, name: String): String {
+        if (container.findFile(name) == null) return name
+        var n = 1
+        while (container.findFile("$name ($n)") != null) n++
+        return "$name ($n)"
     }
 
     fun setToolApproval(toolName: String, needsApproval: Boolean) {
@@ -1282,10 +1411,26 @@ data class WorkspaceDetailState(
     val syncRoots: Set<String> = emptySet(),
     /** 当前同步弹窗针对的目录（SCANNING/PREVIEW/EXECUTING 期间非空） */
     val activeSyncRoot: String? = null,
+    /** 当前同步弹窗针对 syncRoot 内的子范围（空 = 整棵 syncRoot 完整同步） */
+    val activeSyncScope: String = "",
     val syncProgress: SyncProgress? = null,
     val syncError: String? = null,
     /** 原始目录权限失效的目录名（非空 = 显示重新选择目录弹窗） */
     val syncSourceLostFor: String? = null,
+    /** 目录导出复制进行中（显示导出进度弹窗） */
+    val dirExporting: Boolean = false,
+    /** 目录导出复制进度（done / total） */
+    val exportProgress: ExportProgress? = null,
+    /** 目录导出结果提示（一次性 toast） */
+    val dirExportNotice: String? = null,
+    /** 目录导出结果是否为错误 */
+    val dirExportNoticeError: Boolean = false,
+)
+
+/** 目录导出执行进度 */
+data class ExportProgress(
+    val done: Int,
+    val total: Int,
 )
 
 /** 「导回原处」显式状态机 */
