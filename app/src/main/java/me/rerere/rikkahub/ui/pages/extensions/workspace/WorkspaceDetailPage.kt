@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -46,6 +47,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -122,6 +124,11 @@ fun WorkspaceDetailPage(id: String) {
             vm.clearDirExportNotice()
         }
     }
+
+    // 每个目录（area+path）各保留一个独立的 LazyListState：
+    // 切换目录时旧目录的滚动状态对象不被销毁，返回时直接复用，即可原样恢复位置，
+    // 无需手动记录/换算偏移，不会跳动、不会逐次累积误差
+    val filesListStates = remember { mutableStateMapOf<String, LazyListState>() }
 
     // 新增：目录选择器（用于导入整个目录）
     val directoryPicker = rememberLauncherForActivityResult(
@@ -289,6 +296,7 @@ fun WorkspaceDetailPage(id: String) {
 
                 1 -> WorkspaceFilesPage(
                     state = state,
+                    listState = filesListStates.getOrPut("${state.area.name}:${state.path}") { LazyListState() },
                     contentPadding = PaddingValues(),
                     onSelectArea = vm::selectArea,
                     onGoUp = vm::goUp,
@@ -807,6 +815,7 @@ private fun InstallRootfsDialog(
 @Composable
 private fun WorkspaceFilesPage(
     state: WorkspaceDetailState,
+    listState: LazyListState,
     contentPadding: PaddingValues,
     onSelectArea: (WorkspaceStorageArea) -> Unit,
     onGoUp: () -> Unit,
@@ -817,59 +826,84 @@ private fun WorkspaceFilesPage(
     onShare: (WorkspaceFileEntry) -> Unit,
     onExportDir: (WorkspaceFileEntry) -> Unit,
 ) {
-    LazyColumn(
+    Column(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = contentPadding + PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        item {
-            WorkspaceAreaSelector(
-                selected = state.area,
-                onSelected = onSelectArea,
-            )
-        }
-
-        item {
-            WorkspacePathBar(
-                path = displayAreaPath(state.area, state.path),
-                canGoUp = state.path.isNotBlank(),
-                onGoUp = onGoUp,
-            )
-        }
-
+        WorkspaceAreaSelector(
+            selected = state.area,
+            onSelected = onSelectArea,
+            modifier = Modifier.padding(horizontal = 16.dp),
+        )
+        WorkspacePathBar(
+            path = displayAreaPath(state.area, state.path),
+            canGoUp = state.path.isNotBlank(),
+            onGoUp = onGoUp,
+            modifier = Modifier.padding(horizontal = 8.dp),
+        )
         state.error?.let { error ->
-            item {
+            Box(modifier = Modifier.padding(horizontal = 16.dp)) {
                 ErrorCard(error)
             }
         }
-
-        if (!state.loading && state.entries.isEmpty() && state.error == null) {
-            item {
-                EmptyDirectoryState()
-            }
-        }
-
-        items(state.entries, key = { "${state.area.name}:${it.path}" }) { entry ->
-            val syncScope = syncScopeOf(state, entry)
-            WorkspaceFileCard(
-                entry = entry,
-                onOpen = { onOpen(entry) },
-                onDelete = { onDelete(entry) },
-                onExport = { onExport(entry) },
-                onShare = { onShare(entry) },
-                onExportDir = if (entry.isDirectory && state.area == WorkspaceStorageArea.FILES) {
-                    { onExportDir(entry) }
-                } else {
-                    null
-                },
-                onSyncToSource = if (syncScope != null) {
-                    {
-                        onSyncToSource(syncScope.first, syncScope.second, syncScope.third)
+        when {
+            state.entries.isNotEmpty() -> {
+                // 仅在有数据时挂载 LazyColumn：加载期间不渲染空列表，
+                // 保留的 LazyListState 不会被清空/塌缩，返回时位置原样保持
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = contentPadding + PaddingValues(
+                        start = 16.dp,
+                        top = 4.dp,
+                        end = 16.dp,
+                        bottom = 16.dp,
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    items(state.entries, key = { "${state.area.name}:${it.path}" }) { entry ->
+                        val syncScope = syncScopeOf(state, entry)
+                        WorkspaceFileCard(
+                            entry = entry,
+                            onOpen = { onOpen(entry) },
+                            onDelete = { onDelete(entry) },
+                            onExport = { onExport(entry) },
+                            onShare = { onShare(entry) },
+                            onExportDir = if (entry.isDirectory && state.area == WorkspaceStorageArea.FILES) {
+                                { onExportDir(entry) }
+                            } else {
+                                null
+                            },
+                            onSyncToSource = if (syncScope != null) {
+                                {
+                                    onSyncToSource(syncScope.first, syncScope.second, syncScope.third)
+                                }
+                            } else {
+                                null
+                            },
+                        )
                     }
-                } else {
-                    null
-                },
-            )
+                }
+            }
+
+            state.loading -> {
+                // 数据加载中
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
+
+            else -> {
+                // 出错（error 卡已展示）时不再补一个误导性的「空目录」提示
+                if (state.error == null) {
+                    EmptyDirectoryState()
+                }
+            }
         }
     }
 }
@@ -895,12 +929,13 @@ private fun syncScopeOf(
 private fun WorkspaceAreaSelector(
     selected: WorkspaceStorageArea,
     onSelected: (WorkspaceStorageArea) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val areas = listOf(
         WorkspaceStorageArea.FILES to stringResource(R.string.workspace_detail_area_files),
         WorkspaceStorageArea.LINUX to stringResource(R.string.workspace_detail_area_rootfs),
     )
-    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+    SingleChoiceSegmentedButtonRow(modifier = modifier.fillMaxWidth()) {
         areas.forEachIndexed { index, (area, label) ->
             SegmentedButton(
                 selected = selected == area,
@@ -924,9 +959,10 @@ private fun WorkspacePathBar(
     path: String,
     canGoUp: Boolean,
     onGoUp: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
