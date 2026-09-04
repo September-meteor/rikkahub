@@ -245,6 +245,10 @@ class WorkspaceManager(
      * - rootfs 的 /tmp 与 /var/tmp 只清**内容**不删目录——用户命令与工具
      *   （如变更扫描器的 `find > /tmp/xxx`）依赖这些目录存在，删目录会让重定向全部失败；
      *   若目录缺失则创建（fresh rootfs 可能没有）。
+     *
+     * 注意：rootfs 内的 /tmp、/var/tmp 只应在沙盒已安装（rootfs 存在）时才创建/清理；
+     * 未安装沙盒的工作区 `linux/` 下不应凭空出现这两个目录（它们看起来像系统目录，
+     * 实际由 RootfsPatcher 在安装时创建）。
      */
     fun cleanupAllTempDirs() {
         val roots = baseDir.listFiles()?.filter { it.isDirectory } ?: return
@@ -253,6 +257,8 @@ class WorkspaceManager(
             if (!root.matches(ROOT_NAME_REGEX)) continue
             // PRoot temp files
             tempDir(root).let { if (it.exists()) it.deleteRecursively() }
+            // 未安装沙盒（rootfs）的工作区不创建/清理 rootfs 内部临时目录
+            if (!hasRootfs(root)) continue
             // Rootfs /tmp、/var/tmp：清内容、保目录、缺失则建
             listOf("tmp", "var/tmp").forEach { rel ->
                 File(linuxDir(root), rel).let { d ->

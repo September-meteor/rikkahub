@@ -58,6 +58,45 @@ class ExampleUnitTest {
     }
 
     @Test
+    fun cleanupTempDirsSkipsRootfsTmpWhenNotInstalled() {
+        val baseDir = Files.createTempDirectory("workspace-cleanup-test").toFile()
+        val manager = WorkspaceManager(baseDir)
+        val root = "test-workspace"
+        manager.ensureWorkspace(root)
+        assertFalse(manager.hasRootfs(root))
+
+        // 未安装沙盒（无 bin/sh）时，启动清理不应在 linux/ 下凭空创建 /tmp、/var/tmp
+        manager.cleanupAllTempDirs()
+
+        assertFalse(File(manager.linuxDir(root), "tmp").exists())
+        assertFalse(File(manager.linuxDir(root), "var/tmp").exists())
+    }
+
+    @Test
+    fun cleanupTempDirsKeepsRootfsTmpWhenInstalled() {
+        val baseDir = Files.createTempDirectory("workspace-cleanup-test").toFile()
+        val manager = WorkspaceManager(baseDir)
+        val root = "test-workspace"
+        manager.ensureWorkspace(root)
+
+        // 模拟已安装的 rootfs：存在入口 shell，且 /tmp 里已有临时文件
+        val linuxDir = manager.linuxDir(root)
+        File(linuxDir, "bin").mkdirs()
+        File(linuxDir, "bin/sh").writeText("#!/bin/sh\n")
+        File(linuxDir, "tmp").mkdirs()
+        File(linuxDir, "tmp/stale.txt").writeText("stale")
+        assertTrue(manager.hasRootfs(root))
+
+        manager.cleanupAllTempDirs()
+
+        // 已安装沙盒：/tmp 目录保留、内容清空；缺失的 /var/tmp 会被补建
+        val tmpDir = File(linuxDir, "tmp")
+        assertTrue(tmpDir.isDirectory)
+        assertTrue(tmpDir.listFiles().orEmpty().isEmpty())
+        assertTrue(File(linuxDir, "var/tmp").isDirectory)
+    }
+
+    @Test
     fun rootfsInstallerDownloadsAndExtractsTarGz() {
         val baseDir = Files.createTempDirectory("workspace-manager-test").toFile()
         val manager = WorkspaceManager(baseDir)
