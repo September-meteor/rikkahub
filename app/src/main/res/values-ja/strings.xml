@@ -1468,4 +1468,35 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_tts_page_default_playback_speed">デフォルトの再生速度</string>
   <string name="search_page_scope_current_assistant">現在のアシスタント</string>
   <string name="search_page_scope_all_assistants">すべてのアシスタント</string>
+  <!-- workspace のインポート/同期エラー系・フォールバックとエンジン失敗（i18n sweep） -->
+  <string name="workspace_detail_import_file_failed">ファイルのインポートに失敗しました</string>
+  <string name="workspace_detail_import_dir_failed">フォルダーのインポートに失敗しました</string>
+  <string name="workspace_error_cannot_read_file">選択したファイルを読み取れません</string>
+  <string name="workspace_error_cannot_access_dir">選択したフォルダーにアクセスできません</string>
+  <string name="workspace_error_area_dir_unavailable">ワークスペースのディレクトリが利用できません</string>
+  <string name="workspace_unknown_error">不明なエラー</string>
+  <string name="workspace_sync_stage_scan_internal">内部ファイルのスキャンに失敗しました：%1$s</string>
+  <string name="workspace_sync_stage_scan_external">外部フォルダーのスキャンに失敗しました：%1$s</string>
+  <string name="workspace_sync_stage_compare">ファイルの比較中にエラーが発生しました：%1$s</string>
+  <string name="workspace_sync_stage_execute">同期に失敗しました：%1$s</string>
+  <string name="workspace_sync_failed_generic">同期に失敗しました</string>
+  <string name="workspace_sync_error_create_dir_failed">フォルダーを作成できません: %1$s</string>
+  <string name="workspace_sync_error_create_file_failed">ファイルを作成できません: %1$s</string>
+  <string name="workspace_sync_error_open_stream_failed">出力ストリームを開けません: %1$s</string>
+  <string name="workspace_sync_error_source_missing">元のファイルが存在しません: %1$s</string>
+  <string name="workspace_sync_error_read_source_failed">元のファイルを読み取れません: %1$s</string>
+  <!-- 価格スロット：曜日の短縮ラベルと区切り -->
+  <string-array name="setting_provider_page_price_slot_weekday_short">
+    <item>月</item>
+    <item>火</item>
+    <item>水</item>
+    <item>木</item>
+    <item>金</item>
+    <item>土</item>
+    <item>日</item>
+  </string-array>
+  <string name="setting_provider_page_price_slot_weekday_separator">、</string>
+  <!-- 画像圧縮の範囲説明 / 推論内容のコピー（アクセシビリティ） -->
+  <string name="image_compression_range">範囲: 512 ~ 8192</string>
+  <string name="message_reasoning_copy">推論内容をコピー</string>
 </resources>

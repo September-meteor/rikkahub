@@ -113,7 +113,7 @@ fun SettingPreferencesExperimentalPage(vm: SettingVM = koinViewModel()) {
                         item(
                             leadingContent = { Icon(HugeIcons.ImageUpload, null) },
                             headlineContent = { Text(stringResource(R.string.image_compression_max_dimension)) },
-                            supportingContent = { Text("范围: 512 ~ 8192") },
+                            supportingContent = { Text(stringResource(R.string.image_compression_range)) },
                             trailingContent = {
                                 var inputText by remember { mutableStateOf(settings.imageMaxDimension.toString()) }
 

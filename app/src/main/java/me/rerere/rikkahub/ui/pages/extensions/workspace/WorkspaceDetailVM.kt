@@ -29,6 +29,8 @@ import me.rerere.rikkahub.data.sync.SyncPreviewType
 import me.rerere.rikkahub.data.sync.SyncSnapshot
 import me.rerere.rikkahub.data.sync.SyncStage
 import me.rerere.rikkahub.data.sync.SyncStageException
+import me.rerere.rikkahub.data.sync.WorkspaceSyncException
+import me.rerere.rikkahub.data.sync.WorkspaceSyncFailureReason
 import me.rerere.rikkahub.data.sync.WorkspaceIgnoreRules
 import me.rerere.rikkahub.data.sync.WorkspaceSyncEngine
 import me.rerere.workspace.RootfsInstallProgress
@@ -220,7 +222,7 @@ class WorkspaceDetailVM(
     ) {
         runCatching {
             val inputStream = context.contentResolver.openInputStream(uri)
-                ?: error("无法读取所选文件")
+                ?: error(appContext.getString(R.string.workspace_error_cannot_read_file))
             repository.importFile(
                 id = id,
                 area = area,
@@ -232,7 +234,7 @@ class WorkspaceDetailVM(
         }.onSuccess {
             refresh()
         }.onFailure { error ->
-            _state.update { it.copy(error = error.message ?: "导入文件失败", importError = error.message ?: "导入文件失败") }
+            _state.update { it.copy(error = error.toUserMessage(appContext.getString(R.string.workspace_detail_import_file_failed)), importError = error.toUserMessage(appContext.getString(R.string.workspace_detail_import_file_failed))) }
             Log.e(TAG, "导入文件失败: $error", error)
         }
     }
@@ -260,7 +262,7 @@ class WorkspaceDetailVM(
 
             runCatching {
                 val rootDoc = DocumentFile.fromTreeUri(context, treeUri)
-                    ?: error("无法访问所选目录")
+                    ?: error(appContext.getString(R.string.workspace_error_cannot_access_dir))
                 val rootName = rootDoc.name ?: "imported"
                 val rules = WorkspaceIgnoreRules(enableGitignore, customIgnorePatterns)
 
@@ -323,8 +325,8 @@ class WorkspaceDetailVM(
                     it.copy(
                         loading = false,
                         importProgress = null,
-                        error = error.message ?: "导入目录失败",
-                        importError = error.message ?: "导入目录失败",
+                        error = error.toUserMessage(appContext.getString(R.string.workspace_detail_import_dir_failed)),
+                        importError = error.toUserMessage(appContext.getString(R.string.workspace_detail_import_dir_failed)),
                     )
                 }
                 Log.e(TAG, "导入目录失败: $error", error)
@@ -341,7 +343,7 @@ class WorkspaceDetailVM(
             viewModelScope.launch(Dispatchers.IO) {
                 runCatching {
                     val stream = context.contentResolver.openInputStream(filePending.uri)
-                        ?: error("无法读取所选文件")
+                        ?: error(appContext.getString(R.string.workspace_error_cannot_read_file))
                     repository.importFile(
                         id = id,
                         area = filePending.area,
@@ -353,7 +355,7 @@ class WorkspaceDetailVM(
                 }.onSuccess {
                     refresh()
                 }.onFailure { error ->
-                    _state.update { it.copy(error = error.message ?: "导入文件失败", importError = error.message ?: "导入文件失败") }
+                    _state.update { it.copy(error = error.toUserMessage(appContext.getString(R.string.workspace_detail_import_file_failed)), importError = error.toUserMessage(appContext.getString(R.string.workspace_detail_import_file_failed))) }
             Log.e(TAG, "导入文件失败: $error", error)
                 }
             }
@@ -367,7 +369,7 @@ class WorkspaceDetailVM(
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
                 val rootDoc = DocumentFile.fromTreeUri(context, pending.treeUri)
-                    ?: error("无法访问所选目录")
+                    ?: error(appContext.getString(R.string.workspace_error_cannot_access_dir))
                 val rules = importRules ?: WorkspaceIgnoreRules(
                     repository.getById(id)?.enableGitignore ?: true,
                     repository.getById(id)?.customIgnorePatterns ?: "",
@@ -388,8 +390,8 @@ class WorkspaceDetailVM(
                     it.copy(
                         loading = false,
                         importProgress = null,
-                        error = error.message ?: "导入目录失败",
-                        importError = error.message ?: "导入目录失败",
+                        error = error.toUserMessage(appContext.getString(R.string.workspace_detail_import_dir_failed)),
+                        importError = error.toUserMessage(appContext.getString(R.string.workspace_detail_import_dir_failed)),
                     )
                 }
                 Log.e(TAG, "导入目录失败: $error", error)
@@ -414,7 +416,7 @@ class WorkspaceDetailVM(
                 runCatching {
                     repository.deleteFile(id, filePending.area, filePending.targetPath, recursive = true)
                     val stream = context.contentResolver.openInputStream(filePending.uri)
-                        ?: error("无法读取所选文件")
+                        ?: error(appContext.getString(R.string.workspace_error_cannot_read_file))
                     repository.importFile(
                         id = id,
                         area = filePending.area,
@@ -426,7 +428,7 @@ class WorkspaceDetailVM(
                 }.onSuccess {
                     refresh()
                 }.onFailure { error ->
-                    _state.update { it.copy(error = error.message ?: "导入文件失败", importError = error.message ?: "导入文件失败") }
+                    _state.update { it.copy(error = error.toUserMessage(appContext.getString(R.string.workspace_detail_import_file_failed)), importError = error.toUserMessage(appContext.getString(R.string.workspace_detail_import_file_failed))) }
             Log.e(TAG, "导入文件失败: $error", error)
                 }
             }
@@ -445,7 +447,7 @@ class WorkspaceDetailVM(
                 }
                 repository.deleteFile(id, pending.area, targetPath, recursive = false)
                 val rootDoc = DocumentFile.fromTreeUri(context, pending.treeUri)
-                    ?: error("无法访问所选目录")
+                    ?: error(appContext.getString(R.string.workspace_error_cannot_access_dir))
                 val rules = importRules ?: WorkspaceIgnoreRules(true, "")
                 importTree(context, rootDoc, pending.rootName, pending.destPath, pending.area, rules, registerSnapshot = true)
             }.onFailure { error ->
@@ -453,8 +455,8 @@ class WorkspaceDetailVM(
                     it.copy(
                         loading = false,
                         importProgress = null,
-                        error = error.message ?: "导入目录失败",
-                        importError = error.message ?: "导入目录失败",
+                        error = error.toUserMessage(appContext.getString(R.string.workspace_detail_import_dir_failed)),
+                        importError = error.toUserMessage(appContext.getString(R.string.workspace_detail_import_dir_failed)),
                     )
                 }
                 Log.e(TAG, "导入目录失败: $error", error)
@@ -649,7 +651,7 @@ class WorkspaceDetailVM(
         rules: WorkspaceIgnoreRules,
         docCache: DocumentCache,
     ): List<SyncPreviewItem> {
-        val areaDir = repository.workspaceAreaDir(id, area) ?: error("工作区目录不可用")
+        val areaDir = repository.workspaceAreaDir(id, area) ?: error(appContext.getString(R.string.workspace_error_area_dir_unavailable))
         val baseDir = File(areaDir, destPath)
         val snapshot = repository.readSyncSnapshot(id, rootName)
 
@@ -706,7 +708,7 @@ class WorkspaceDetailVM(
     ) {
         Log.d(TAG, "executeImportOverwrite: root=$rootName area=$area dest=$destPath preview=${preview.size}")
         if (preview.isNotEmpty()) {
-            val areaDir = repository.workspaceAreaDir(id, area) ?: error("工作区目录不可用")
+            val areaDir = repository.workspaceAreaDir(id, area) ?: error(appContext.getString(R.string.workspace_error_area_dir_unavailable))
             val localRoot = File(areaDir, if (destPath.isBlank()) rootName else "$destPath/$rootName")
             WorkspaceSyncEngine.executeImportToLocal(
                 context = context,
@@ -988,7 +990,7 @@ class WorkspaceDetailVM(
                     ?: WorkspaceIgnoreRules(workspace.enableGitignore, workspace.customIgnorePatterns).also {
                         WorkspaceSyncEngine.loadGitignoreTree(context, rootDoc, it, syncDocCache)
                     }
-                val filesDir = repository.workspaceFilesDir(id) ?: error("工作区文件目录不可用")
+                val filesDir = repository.workspaceFilesDir(id) ?: error(appContext.getString(R.string.workspace_dir_export_files_dir_unavailable))
 
                 // 执行写入（先删后写，复用缓存定位文件/目录，带进度回调）
                 stageCatching(SyncStage.EXECUTE) {
@@ -1111,16 +1113,54 @@ class WorkspaceDetailVM(
             throw SyncStageException(stage, e)
         }
 
-    /** 把同步链路异常翻译成用户可读文案 */
-    private fun Throwable.toSyncErrorMessage(): String = when (this) {
-        is SyncStageException -> when (stage) {
-            SyncStage.SCAN_INTERNAL -> "扫描内部文件失败：${message ?: "未知错误"}"
-            SyncStage.SCAN_EXTERNAL -> "扫描外部目录失败：${message ?: "未知错误"}"
-            SyncStage.COMPARE -> "对比文件时出错：${message ?: "未知错误"}"
-            SyncStage.EXECUTE -> "同步失败：${message ?: "未知错误"}"
+    /** 展开异常链，取出底层同步引擎失败（若有） */
+    private fun Throwable.findSyncEngineError(): WorkspaceSyncException? {
+        var current: Throwable? = this
+        while (current != null) {
+            if (current is WorkspaceSyncException) return current
+            current = current.cause
         }
+        return null
+    }
 
-        else -> message ?: "同步失败"
+    /** 把同步引擎底层失败（原因 + 相对路径）翻译成本地化文案 */
+    private fun WorkspaceSyncException.toLocalizedMessage(): String = when (reason) {
+        WorkspaceSyncFailureReason.CREATE_DIR_FAILED ->
+            appContext.getString(R.string.workspace_sync_error_create_dir_failed, path)
+        WorkspaceSyncFailureReason.CREATE_FILE_FAILED ->
+            appContext.getString(R.string.workspace_sync_error_create_file_failed, path)
+        WorkspaceSyncFailureReason.OPEN_STREAM_FAILED ->
+            appContext.getString(R.string.workspace_sync_error_open_stream_failed, path)
+        WorkspaceSyncFailureReason.SOURCE_MISSING ->
+            appContext.getString(R.string.workspace_sync_error_source_missing, path)
+        WorkspaceSyncFailureReason.READ_SOURCE_FAILED ->
+            appContext.getString(R.string.workspace_sync_error_read_source_failed, path)
+    }
+
+    /** 导入等非同步链路的统一用户可读文案：底层引擎错误 > message > 场景兜底 */
+    private fun Throwable.toUserMessage(fallback: String): String =
+        findSyncEngineError()?.toLocalizedMessage() ?: message ?: fallback
+
+    /** 把同步链路异常翻译成用户可读文案 */
+    private fun Throwable.toSyncErrorMessage(): String {
+        val detail = findSyncEngineError()?.toLocalizedMessage()
+            ?: message
+            ?: appContext.getString(R.string.workspace_unknown_error)
+        return when (this) {
+            is SyncStageException -> when (stage) {
+                SyncStage.SCAN_INTERNAL ->
+                    appContext.getString(R.string.workspace_sync_stage_scan_internal, detail)
+                SyncStage.SCAN_EXTERNAL ->
+                    appContext.getString(R.string.workspace_sync_stage_scan_external, detail)
+                SyncStage.COMPARE ->
+                    appContext.getString(R.string.workspace_sync_stage_compare, detail)
+                SyncStage.EXECUTE ->
+                    appContext.getString(R.string.workspace_sync_stage_execute, detail)
+            }
+            else -> findSyncEngineError()?.toLocalizedMessage()
+                ?: message
+                ?: appContext.getString(R.string.workspace_sync_failed_generic)
+        }
     }
 
     /** 权限失效后用户重新选择的目录：占住权限、持久化 URI，并自动生成新预览 */
@@ -1263,8 +1303,7 @@ class WorkspaceDetailVM(
                     it.copy(
                         dirExporting = false,
                         exportProgress = null,
-                        dirExportNotice = error.message
-                            ?: appContext.getString(R.string.workspace_dir_export_failed),
+                        dirExportNotice = error.toUserMessage(appContext.getString(R.string.workspace_dir_export_failed)),
                         dirExportNoticeError = true,
                     )
                 }

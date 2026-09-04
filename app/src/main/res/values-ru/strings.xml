@@ -1468,4 +1468,35 @@
   <string name="setting_tts_page_default_playback_speed_description">Применяется локально к каждому TTS-провайдеру без изменения его настроек синтеза.</string>
   <string name="search_page_scope_current_assistant">Текущий ассистент</string>
   <string name="search_page_scope_all_assistants">Все ассистенты</string>
+  <!-- workspace: ошибки импорта/синхронизации и сбои движка (i18n sweep) -->
+  <string name="workspace_detail_import_file_failed">Не удалось импортировать файл</string>
+  <string name="workspace_detail_import_dir_failed">Не удалось импортировать папку</string>
+  <string name="workspace_error_cannot_read_file">Не удалось прочитать выбранный файл</string>
+  <string name="workspace_error_cannot_access_dir">Не удалось открыть выбранную папку</string>
+  <string name="workspace_error_area_dir_unavailable">Каталог рабочей области недоступен</string>
+  <string name="workspace_unknown_error">Неизвестная ошибка</string>
+  <string name="workspace_sync_stage_scan_internal">Не удалось просканировать внутренние файлы: %1$s</string>
+  <string name="workspace_sync_stage_scan_external">Не удалось просканировать внешний каталог: %1$s</string>
+  <string name="workspace_sync_stage_compare">Ошибка при сравнении файлов: %1$s</string>
+  <string name="workspace_sync_stage_execute">Не удалось выполнить синхронизацию: %1$s</string>
+  <string name="workspace_sync_failed_generic">Не удалось выполнить синхронизацию</string>
+  <string name="workspace_sync_error_create_dir_failed">Не удалось создать папку: %1$s</string>
+  <string name="workspace_sync_error_create_file_failed">Не удалось создать файл: %1$s</string>
+  <string name="workspace_sync_error_open_stream_failed">Не удалось открыть поток вывода: %1$s</string>
+  <string name="workspace_sync_error_source_missing">Исходный файл не существует: %1$s</string>
+  <string name="workspace_sync_error_read_source_failed">Не удалось прочитать исходный файл: %1$s</string>
+  <!-- Ценовые слоты: короткие названия дней недели и разделитель -->
+  <string-array name="setting_provider_page_price_slot_weekday_short">
+    <item>Пн</item>
+    <item>Вт</item>
+    <item>Ср</item>
+    <item>Чт</item>
+    <item>Пт</item>
+    <item>Сб</item>
+    <item>Вс</item>
+  </string-array>
+  <string name="setting_provider_page_price_slot_weekday_separator">, </string>
+  <!-- Диапазон сжатия изображений / Копирование рассуждения (доступность) -->
+  <string name="image_compression_range">Диапазон: 512 ~ 8192</string>
+  <string name="message_reasoning_copy">Скопировать рассуждение</string>
 </resources>

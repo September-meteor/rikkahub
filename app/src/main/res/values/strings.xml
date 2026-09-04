@@ -1472,4 +1472,35 @@
   <string name="chat_generation_network_disconnected">Network connection lost</string>
   <string name="search_page_scope_current_assistant">Current Assistant</string>
   <string name="search_page_scope_all_assistants">All Assistants</string>
+  <!-- workspace 导入/同步错误兜底与引擎失败（i18n sweep） -->
+  <string name="workspace_detail_import_file_failed">Failed to import file</string>
+  <string name="workspace_detail_import_dir_failed">Failed to import directory</string>
+  <string name="workspace_error_cannot_read_file">Cannot read the selected file</string>
+  <string name="workspace_error_cannot_access_dir">Cannot access the selected directory</string>
+  <string name="workspace_error_area_dir_unavailable">Workspace directory unavailable</string>
+  <string name="workspace_unknown_error">Unknown error</string>
+  <string name="workspace_sync_stage_scan_internal">Failed to scan internal files: %1$s</string>
+  <string name="workspace_sync_stage_scan_external">Failed to scan the external directory: %1$s</string>
+  <string name="workspace_sync_stage_compare">Error comparing files: %1$s</string>
+  <string name="workspace_sync_stage_execute">Sync failed: %1$s</string>
+  <string name="workspace_sync_failed_generic">Sync failed</string>
+  <string name="workspace_sync_error_create_dir_failed">Cannot create directory: %1$s</string>
+  <string name="workspace_sync_error_create_file_failed">Cannot create file: %1$s</string>
+  <string name="workspace_sync_error_open_stream_failed">Cannot open output stream: %1$s</string>
+  <string name="workspace_sync_error_source_missing">Source file does not exist: %1$s</string>
+  <string name="workspace_sync_error_read_source_failed">Cannot read source file: %1$s</string>
+  <!-- 价格插槽：星期短标签与分隔符 -->
+  <string-array name="setting_provider_page_price_slot_weekday_short">
+    <item>Mon</item>
+    <item>Tue</item>
+    <item>Wed</item>
+    <item>Thu</item>
+    <item>Fri</item>
+    <item>Sat</item>
+    <item>Sun</item>
+  </string-array>
+  <string name="setting_provider_page_price_slot_weekday_separator">, </string>
+  <!-- 图片压缩范围说明 / 思维链复制（无障碍） -->
+  <string name="image_compression_range">Range: 512 ~ 8192</string>
+  <string name="message_reasoning_copy">Copy reasoning</string>
 </resources>

@@ -110,7 +110,7 @@ fun ChatMessageAssistantAvatar(
                     if (!reasoningText.isNullOrBlank()) {
                         Icon(
                             imageVector = HugeIcons.Copy01,
-                            contentDescription = "复制思维链",
+                            contentDescription = stringResource(R.string.message_reasoning_copy),
                             modifier = Modifier
                                 .size(16.dp)
                                 .clickable { context.writeClipboardText(reasoningText) },
@@ -170,7 +170,7 @@ fun ChatMessageAssistantAvatar(
                     if (!reasoningText.isNullOrBlank()) {
                         Icon(
                             imageVector = HugeIcons.Copy01,
-                            contentDescription = "复制思维链",
+                            contentDescription = stringResource(R.string.message_reasoning_copy),
                             modifier = Modifier
                                 .size(16.dp)
                                 .clickable { context.writeClipboardText(reasoningText) },

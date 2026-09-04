@@ -50,6 +50,22 @@ enum class SyncStage { SCAN_INTERNAL, SCAN_EXTERNAL, COMPARE, EXECUTE }
 class SyncStageException(val stage: SyncStage, cause: Throwable?) :
     Exception(cause?.message ?: stage.name, cause)
 
+/** 「写回/导入执行」底层失败原因；携带相对路径，由 UI 层翻译为本地化文案 */
+enum class WorkspaceSyncFailureReason {
+    CREATE_DIR_FAILED,
+    CREATE_FILE_FAILED,
+    OPEN_STREAM_FAILED,
+    SOURCE_MISSING,
+    READ_SOURCE_FAILED,
+}
+
+/** 执行阶段底层 I/O / SAF 失败（含相对路径）；message 保留路径便于日志排查 */
+class WorkspaceSyncException(
+    val reason: WorkspaceSyncFailureReason,
+    val path: String,
+    cause: Throwable? = null,
+) : Exception(path, cause)
+
 /**
  * 工作区「导回原处」核心逻辑：扫描 → 直接对比 → 预览 → 执行写入 → 快照更新。
  *
@@ -637,18 +653,18 @@ object WorkspaceSyncEngine {
             val segments = item.path.split('/')
             val name = segments.last()
             val parent = ensureDocumentDir(rootDoc, segments.dropLast(1), docCache)
-                ?: error("无法创建目录: ${item.path}")
+                ?: throw WorkspaceSyncException(WorkspaceSyncFailureReason.CREATE_DIR_FAILED, item.path)
             val existing = docCache?.files?.get(item.path) ?: parent.findFile(name)
             val fileDoc = if (existing != null && existing.isFile) {
                 existing
             } else {
-                parent.createFile(mimeFor(name), name) ?: error("无法创建文件: ${item.path}")
+                parent.createFile(mimeFor(name), name) ?: throw WorkspaceSyncException(WorkspaceSyncFailureReason.CREATE_FILE_FAILED, item.path)
             }
             if (existing == null) {
                 docCache?.files?.put(item.path, fileDoc)
             }
             val out = resolver.openOutputStream(fileDoc.uri, "wt")
-                ?: error("无法打开输出流: ${item.path}")
+                ?: throw WorkspaceSyncException(WorkspaceSyncFailureReason.OPEN_STREAM_FAILED, item.path)
             // 内部文件位于 files/<syncRoot>/<rel>，读取时补回 syncRoot 前缀
             repository.exportFile(id, WorkspaceStorageArea.FILES, "$syncRoot/${item.path}", out)
             tick()
@@ -660,7 +676,7 @@ object WorkspaceSyncEngine {
         for (item in dirCreates) {
             currentCoroutineContext().ensureActive()
             ensureDocumentDir(rootDoc, item.path.split('/'), docCache)
-                ?: error("无法创建目录: ${item.path}")
+                ?: throw WorkspaceSyncException(WorkspaceSyncFailureReason.CREATE_DIR_FAILED, item.path)
             tick()
         }
     }
@@ -733,11 +749,13 @@ object WorkspaceSyncEngine {
         for (item in writes) {
             currentCoroutineContext().ensureActive()
             val doc = docCache?.files?.get(item.path) ?: resolveDocument(rootDoc, item.path)
-            require(doc != null && doc.isFile) { "源文件不存在: ${item.path}" }
+            if (doc == null || !doc.isFile) {
+                throw WorkspaceSyncException(WorkspaceSyncFailureReason.SOURCE_MISSING, item.path)
+            }
             val target = File(localRoot, item.path)
             target.parentFile?.mkdirs()
             val input = resolver.openInputStream(doc.uri)
-                ?: error("无法读取源文件: ${item.path}")
+                ?: throw WorkspaceSyncException(WorkspaceSyncFailureReason.READ_SOURCE_FAILED, item.path)
             input.use { stream ->
                 target.outputStream().use { stream.copyTo(it) }
             }

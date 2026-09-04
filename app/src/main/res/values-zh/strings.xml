@@ -1470,4 +1470,35 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_tts_page_default_playback_speed_description">本地应用于每个TTS提供商，不会更改其合成设置。</string>
   <string name="search_page_scope_current_assistant">当前助手</string>
   <string name="search_page_scope_all_assistants">所有助手</string>
+  <!-- workspace 导入/同步错误兜底与引擎失败（i18n sweep） -->
+  <string name="workspace_detail_import_file_failed">导入文件失败</string>
+  <string name="workspace_detail_import_dir_failed">导入目录失败</string>
+  <string name="workspace_error_cannot_read_file">无法读取所选文件</string>
+  <string name="workspace_error_cannot_access_dir">无法访问所选目录</string>
+  <string name="workspace_error_area_dir_unavailable">工作区目录不可用</string>
+  <string name="workspace_unknown_error">未知错误</string>
+  <string name="workspace_sync_stage_scan_internal">扫描内部文件失败：%1$s</string>
+  <string name="workspace_sync_stage_scan_external">扫描外部目录失败：%1$s</string>
+  <string name="workspace_sync_stage_compare">对比文件时出错：%1$s</string>
+  <string name="workspace_sync_stage_execute">同步失败：%1$s</string>
+  <string name="workspace_sync_failed_generic">同步失败</string>
+  <string name="workspace_sync_error_create_dir_failed">无法创建目录: %1$s</string>
+  <string name="workspace_sync_error_create_file_failed">无法创建文件: %1$s</string>
+  <string name="workspace_sync_error_open_stream_failed">无法打开输出流: %1$s</string>
+  <string name="workspace_sync_error_source_missing">源文件不存在: %1$s</string>
+  <string name="workspace_sync_error_read_source_failed">无法读取源文件: %1$s</string>
+  <!-- 价格插槽：星期短标签与分隔符 -->
+  <string-array name="setting_provider_page_price_slot_weekday_short">
+    <item>一</item>
+    <item>二</item>
+    <item>三</item>
+    <item>四</item>
+    <item>五</item>
+    <item>六</item>
+    <item>日</item>
+  </string-array>
+  <string name="setting_provider_page_price_slot_weekday_separator">、</string>
+  <!-- 图片压缩范围说明 / 思维链复制（无障碍） -->
+  <string name="image_compression_range">范围: 512 ~ 8192</string>
+  <string name="message_reasoning_copy">复制思维链</string>
 </resources>

@@ -46,6 +46,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -59,10 +60,6 @@ import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.ManagedTextField
 import me.rerere.rikkahub.ui.components.ui.rememberSyncedTextFieldState
 import me.rerere.rikkahub.utils.insertAtCursor
-import java.util.Locale
-
-private val WEEKDAY_LABELS = listOf("一", "二", "三", "四", "五", "六", "日")
-private val WEEKDAY_LABELS_EN = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
 private val PRESET_COLORS = listOf(
     "#FF5722",
@@ -173,12 +170,12 @@ private fun parseTimeRangesInput(value: String): List<TimeRange>? {
 @Composable
 private fun weekdaySummary(selected: Set<Int>): String {
     if (selected.isEmpty()) return stringResource(R.string.setting_provider_page_price_slot_weekday_none)
-    val labels = if (Locale.getDefault().language == "zh") WEEKDAY_LABELS else WEEKDAY_LABELS_EN
+    val labels = stringArrayResource(R.array.setting_provider_page_price_slot_weekday_short)
     return when {
         selected == setOf(1, 2, 3, 4, 5, 6, 7) -> stringResource(R.string.setting_provider_page_price_slot_all_days)
         selected == setOf(1, 2, 3, 4, 5) -> stringResource(R.string.setting_provider_page_price_slot_workday)
         selected == setOf(6, 7) -> stringResource(R.string.setting_provider_page_price_slot_weekend)
-        else -> selected.sorted().joinToString("、") { labels[it - 1] }
+        else -> selected.sorted().joinToString(stringResource(R.string.setting_provider_page_price_slot_weekday_separator)) { labels[it - 1] }
     }
 }
 
@@ -497,7 +494,8 @@ private fun WeekdaySheet(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                WEEKDAY_LABELS.forEachIndexed { index, label ->
+                val chipLabels = stringArrayResource(R.array.setting_provider_page_price_slot_weekday_short)
+                chipLabels.forEachIndexed { index, label ->
                     val day = index + 1
                     FilterChip(
                         selected = day in selected,

@@ -1466,4 +1466,35 @@
   <string name="setting_tts_page_default_playback_speed_description">在本機套用至每個 TTS 提供者，不變更其合成設定。</string>
   <string name="search_page_scope_current_assistant">目前助手</string>
   <string name="search_page_scope_all_assistants">全部助手</string>
+  <!-- workspace 匯入/同步錯誤兜底與引擎失敗（i18n sweep） -->
+  <string name="workspace_detail_import_file_failed">匯入檔案失敗</string>
+  <string name="workspace_detail_import_dir_failed">匯入目錄失敗</string>
+  <string name="workspace_error_cannot_read_file">無法讀取所選檔案</string>
+  <string name="workspace_error_cannot_access_dir">無法存取所選目錄</string>
+  <string name="workspace_error_area_dir_unavailable">工作區目錄不可用</string>
+  <string name="workspace_unknown_error">未知錯誤</string>
+  <string name="workspace_sync_stage_scan_internal">掃描內部檔案失敗：%1$s</string>
+  <string name="workspace_sync_stage_scan_external">掃描外部目錄失敗：%1$s</string>
+  <string name="workspace_sync_stage_compare">比對檔案時出錯：%1$s</string>
+  <string name="workspace_sync_stage_execute">同步失敗：%1$s</string>
+  <string name="workspace_sync_failed_generic">同步失敗</string>
+  <string name="workspace_sync_error_create_dir_failed">無法建立目錄: %1$s</string>
+  <string name="workspace_sync_error_create_file_failed">無法建立檔案: %1$s</string>
+  <string name="workspace_sync_error_open_stream_failed">無法開啟輸出串流: %1$s</string>
+  <string name="workspace_sync_error_source_missing">來源檔案不存在: %1$s</string>
+  <string name="workspace_sync_error_read_source_failed">無法讀取來源檔案: %1$s</string>
+  <!-- 價格插槽：星期短標籤與分隔符 -->
+  <string-array name="setting_provider_page_price_slot_weekday_short">
+    <item>一</item>
+    <item>二</item>
+    <item>三</item>
+    <item>四</item>
+    <item>五</item>
+    <item>六</item>
+    <item>日</item>
+  </string-array>
+  <string name="setting_provider_page_price_slot_weekday_separator">、</string>
+  <!-- 圖片壓縮範圍說明 / 思維鏈複製（無障礙） -->
+  <string name="image_compression_range">範圍: 512 ~ 8192</string>
+  <string name="message_reasoning_copy">複製思維鏈</string>
 </resources>
