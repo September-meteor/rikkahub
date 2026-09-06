@@ -287,6 +287,41 @@ class WorkspaceManager(
     fun moveFile(root: String, source: String, target: String, overwrite: Boolean = false): WorkspaceFileEntry =
         fileSystem.move(filesDir(root), source, target, overwrite)
 
+    /** 就地重命名（同目录改名，不跨目录移动），目录整体改名同样支持。失败返回 false。 */
+    fun renameFile(
+        root: String,
+        path: String,
+        newName: String,
+        area: WorkspaceStorageArea = WorkspaceStorageArea.FILES,
+    ): Boolean {
+        val base = areaDir(root, area)
+        val target = sameParentTarget(path, newName)
+        return tryMove(base, path, target)
+    }
+
+    /** Rootfs 区就地重命名（沙盒内绝对路径，含 /workspace 挂载内的真实文件/目录）。失败返回 false。 */
+    fun renameRootfs(root: String, path: String, newName: String): Boolean {
+        require(path.isNotBlank() && path != "/") { "Refusing to rename rootfs root" }
+        val location = resolveRootfsPath(root, path)
+        require(location.relativePath.isNotBlank()) { "Refusing to rename a mount root" }
+        val target = sameParentTarget(location.relativePath, newName)
+        return tryMove(location.rootDir, location.relativePath, target)
+    }
+
+    private fun sameParentTarget(path: String, newName: String): String {
+        val parent = path.substringBeforeLast('/', "")
+        return if (parent.isBlank()) newName else "$parent/$newName"
+    }
+
+    private fun tryMove(base: File, source: String, target: String): Boolean = try {
+        fileSystem.move(base, source, target, overwrite = false)
+        true
+    } catch (_: IllegalArgumentException) {
+        false
+    } catch (_: IllegalStateException) {
+        false
+    }
+
     fun glob(root: String, pattern: String, path: String = ""): List<WorkspaceFileEntry> =
         fileSystem.glob(filesDir(root), pattern, path)
 

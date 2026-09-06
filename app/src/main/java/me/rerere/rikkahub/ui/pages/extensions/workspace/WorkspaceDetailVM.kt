@@ -37,6 +37,7 @@ import me.rerere.workspace.RootfsInstallProgress
 import me.rerere.workspace.RootfsInstallStage
 import me.rerere.workspace.WorkspaceFileEntry
 import me.rerere.workspace.WorkspaceCommandResult
+import me.rerere.workspace.WorkspaceManager
 import me.rerere.workspace.WorkspaceStorageArea
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -161,6 +162,47 @@ class WorkspaceDetailVM(
             }.onFailure { error ->
                 _state.update { it.copy(error = error.message ?: "删除失败") }
             }
+        }
+    }
+
+    /**
+     * 就地重命名（同目录改名，不跨目录移动）。
+     * 若改的是「顶层导入目录」（同步回原目录的根），同步来源注册与快照一并清除
+     * （改名前 UI 已用对话框提示该后果）。
+     */
+    fun rename(entry: WorkspaceFileEntry, newName: String) {
+        viewModelScope.launch {
+            val current = state.value
+            runCatching {
+                val renamed = repository.renameFile(id, current.area, entry.path, newName)
+                if (renamed) {
+                    val syncRoot = topLevelSyncRootOf(entry, current.area)
+                    if (syncRoot != null && syncRoot in current.syncRoots) {
+                        repository.removeSyncSource(id, syncRoot)
+                    }
+                }
+                renamed
+            }.onSuccess { renamed ->
+                if (renamed) {
+                    loadWorkspace()
+                    refresh()
+                } else {
+                    _state.update { it.copy(error = "重命名失败：目标已存在或路径不可写") }
+                }
+            }.onFailure { error ->
+                _state.update { it.copy(error = error.message ?: "重命名失败") }
+            }
+        }
+    }
+
+    /** 条目是否为「顶层导入目录」（其名字即同步根 syncRoot，改名会断开同步回原目录关联）。 */
+    private fun topLevelSyncRootOf(entry: WorkspaceFileEntry, area: WorkspaceStorageArea): String? {
+        if (!entry.isDirectory || entry.virtual) return null
+        return when (area) {
+            WorkspaceStorageArea.FILES ->
+                if ('/' !in entry.path) entry.name else null
+            WorkspaceStorageArea.LINUX ->
+                if (entry.path == "${WorkspaceManager.ROOTFS_WORKSPACE_DIR}/${entry.name}") entry.name else null
         }
     }
 

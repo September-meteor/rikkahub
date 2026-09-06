@@ -1194,6 +1194,11 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="workspace_detail_delete_directory">ディレクトリを削除</string>
   <string name="workspace_detail_delete_file">ファイルを削除</string>
   <string name="workspace_detail_will_delete">%s を削除します。</string>
+  <string name="workspace_detail_rename">名前を変更</string>
+  <string name="workspace_detail_rename_sync_root_note">名前を変更すると「元の場所へ同期」との関連が切れ、同期記録とスナップショットが削除されます。</string>
+  <string name="workspace_detail_rename_error_empty">名前を空にできません</string>
+  <string name="workspace_detail_rename_error_invalid">名前に / は使えず、. や .. にもできません</string>
+  <string name="workspace_detail_rename_error_exists">同じ名前のファイルまたはフォルダーが既に存在します</string>
   <string name="workspace_detail_installing">インストール中</string>
   <string name="workspace_detail_reinstall_rootfs">Rootfs 再インストール</string>
   <string name="workspace_detail_install_rootfs">Rootfs をインストール</string>

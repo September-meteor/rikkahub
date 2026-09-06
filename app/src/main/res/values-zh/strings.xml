@@ -1234,6 +1234,11 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="workspace_detail_delete_directory">删除目录</string>
   <string name="workspace_detail_delete_file">删除文件</string>
   <string name="workspace_detail_will_delete">将删除 %s.</string>
+  <string name="workspace_detail_rename">重命名</string>
+  <string name="workspace_detail_rename_sync_root_note">重命名将断开此目录与「同步回原目录」的关联，并清除其同步记录与快照。</string>
+  <string name="workspace_detail_rename_error_empty">名称不能为空</string>
+  <string name="workspace_detail_rename_error_invalid">名称不能包含 /，也不能是 . 或 ..</string>
+  <string name="workspace_detail_rename_error_exists">已存在同名文件或目录</string>
   <string name="workspace_detail_installing">安装中</string>
   <string name="workspace_detail_reinstall_rootfs">重新安装 Rootfs</string>
   <string name="workspace_detail_install_rootfs">安装 Rootfs</string>

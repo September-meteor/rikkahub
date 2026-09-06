@@ -344,6 +344,27 @@ class WorkspaceRepository(
         return deleted
     }
 
+    /** 就地重命名（同目录改名，不跨目录移动）。失败（目标已存在/源不存在/不可改名）返回 false。 */
+    suspend fun renameFile(
+        id: String,
+        area: WorkspaceStorageArea,
+        path: String,
+        newName: String,
+    ): Boolean = withContext(Dispatchers.IO) {
+        val workspace = dao.getById(id) ?: return@withContext false
+        if (area == WorkspaceStorageArea.LINUX) {
+            try {
+                manager.renameRootfs(workspace.root, path, newName)
+            } catch (e: IllegalArgumentException) {
+                false
+            } catch (e: IllegalStateException) {
+                false
+            }
+        } else {
+            manager.renameFile(workspace.root, path, newName, area)
+        }
+    }
+
     suspend fun moveFile(
         id: String,
         source: String,
@@ -456,6 +477,36 @@ class WorkspaceRepository(
                 updatedAt = System.currentTimeMillis(),
             )
         )
+    }
+
+    /** 移除某目录的同步来源注册并删除其快照文件（顶层导入目录重命名后调用）。 */
+    suspend fun removeSyncSource(id: String, syncRoot: String): Boolean = withContext(Dispatchers.IO) {
+        val ws = dao.getById(id) ?: return@withContext false
+        val current = ws.syncSources()
+        val map = syncSourcesCompat(ws)
+        val existed = syncRoot in map
+        val updated = when {
+            current.isNotEmpty() ->
+                ws.copy(
+                    sourceTreeUri = JsonInstant.encodeToString(map - syncRoot),
+                    updatedAt = System.currentTimeMillis(),
+                )
+            existed ->
+                // 旧单目录格式：来源存于旧列，直接清空
+                ws.copy(
+                    sourceTreeUri = "",
+                    sourceUriPersisted = false,
+                    updatedAt = System.currentTimeMillis(),
+                )
+            else -> ws
+        }
+        if (updated !== ws) dao.upsert(updated)
+        syncSnapshotFile(ws.root, syncRoot).delete()
+        val legacy = legacySyncSnapshotFile(ws.root)
+        if (legacy.exists() && decodeSnapshot(legacy)?.syncRoot == syncRoot) {
+            legacy.delete()
+        }
+        existed
     }
 
     /** 工作区已注册同步来源的目录名集合（含旧单文件快照的 syncRoot，保证旧数据同步入口不消失） */

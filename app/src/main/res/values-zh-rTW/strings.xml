@@ -1192,6 +1192,11 @@
   <string name="workspace_detail_delete_directory">刪除目錄</string>
   <string name="workspace_detail_delete_file">刪除檔案</string>
   <string name="workspace_detail_will_delete">將刪除 %s。</string>
+  <string name="workspace_detail_rename">重新命名</string>
+  <string name="workspace_detail_rename_sync_root_note">重新命名將中斷此目錄與「同步回原目錄」的關聯，並清除其同步記錄與快照。</string>
+  <string name="workspace_detail_rename_error_empty">名稱不能為空</string>
+  <string name="workspace_detail_rename_error_invalid">名稱不能包含 /，也不能是 . 或 ..</string>
+  <string name="workspace_detail_rename_error_exists">已存在同名檔案或目錄</string>
   <string name="workspace_detail_installing">安裝中</string>
   <string name="workspace_detail_reinstall_rootfs">重新安裝 Rootfs</string>
   <string name="workspace_detail_install_rootfs">安裝 Rootfs</string>

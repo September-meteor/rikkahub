@@ -1194,6 +1194,11 @@
   <string name="workspace_detail_delete_directory">Удалить папку</string>
   <string name="workspace_detail_delete_file">Удалить файл</string>
   <string name="workspace_detail_will_delete">Будет удалено %s.</string>
+  <string name="workspace_detail_rename">Переименовать</string>
+  <string name="workspace_detail_rename_sync_root_note">Переименование разорвёт связь с синхронизацией в исходную папку и удалит её запись и снимок.</string>
+  <string name="workspace_detail_rename_error_empty">Имя не может быть пустым</string>
+  <string name="workspace_detail_rename_error_invalid">Имя не должно содержать /, а также быть . или ..</string>
+  <string name="workspace_detail_rename_error_exists">Файл или папка с таким именем уже существует</string>
   <string name="workspace_detail_installing">Установка</string>
   <string name="workspace_detail_reinstall_rootfs">Переустановить Rootfs</string>
   <string name="workspace_detail_install_rootfs">Установить Rootfs</string>

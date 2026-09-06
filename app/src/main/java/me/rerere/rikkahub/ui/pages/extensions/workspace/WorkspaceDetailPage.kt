@@ -75,6 +75,7 @@ import me.rerere.hugeicons.stroke.ArrowTurnBackward
 import me.rerere.hugeicons.stroke.Bash
 import me.rerere.hugeicons.stroke.ComputerTerminal01
 import me.rerere.hugeicons.stroke.Delete01
+import me.rerere.hugeicons.stroke.Edit02
 import me.rerere.hugeicons.stroke.File02
 import me.rerere.hugeicons.stroke.FileImport
 import me.rerere.hugeicons.stroke.Folder01
@@ -92,6 +93,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.ImagePreviewDialog
 import me.rerere.rikkahub.ui.components.ui.ManagedTextField
+import me.rerere.rikkahub.ui.components.ui.rememberSyncedTextFieldState
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
@@ -101,6 +103,7 @@ import me.rerere.rikkahub.utils.plus
 import me.rerere.workspace.RootfsInstallProgress
 import me.rerere.workspace.RootfsInstallStage
 import me.rerere.workspace.WorkspaceFileEntry
+import me.rerere.workspace.WorkspaceManager
 import me.rerere.workspace.WorkspaceShellStatus
 import me.rerere.workspace.WorkspaceStorageArea
 import org.koin.androidx.compose.koinViewModel
@@ -118,6 +121,7 @@ fun WorkspaceDetailPage(id: String) {
     val pagerState = rememberPagerState { 2 }
     val scope = rememberCoroutineScope()
     var deleteTarget by remember { mutableStateOf<WorkspaceFileEntry?>(null) }
+    var renameTarget by remember { mutableStateOf<WorkspaceFileEntry?>(null) }
     var showInstallDialog by remember { mutableStateOf(false) }
     var previewImageUri by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
@@ -349,6 +353,7 @@ fun WorkspaceDetailPage(id: String) {
                         }
                     },
                     onDelete = { deleteTarget = it },
+                    onRename = { renameTarget = it },
                     onExport = { entry ->
                         exportTarget = entry
                         exportLauncher.launch(entry.name)
@@ -424,6 +429,19 @@ fun WorkspaceDetailPage(id: String) {
         ) {
             Text(stringResource(R.string.workspace_detail_will_delete, entry.path))
         }
+    }
+
+    renameTarget?.let { entry ->
+        WorkspaceRenameDialog(
+            entry = entry,
+            siblings = state.entries,
+            showSyncRootNote = isTopLevelSyncRoot(state.area, entry, state.syncRoots),
+            onConfirm = { newName ->
+                vm.rename(entry, newName)
+                renameTarget = null
+            },
+            onDismiss = { renameTarget = null },
+        )
     }
 
     // 目录导出：执行中弹窗（与「同步回原目录」执行阶段一致的进度样式）
@@ -836,6 +854,7 @@ private fun WorkspaceFilesPage(
     onExport: (WorkspaceFileEntry) -> Unit,
     onShare: (WorkspaceFileEntry) -> Unit,
     onExportDir: (WorkspaceFileEntry) -> Unit,
+    onRename: (WorkspaceFileEntry) -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -894,6 +913,11 @@ private fun WorkspaceFilesPage(
                             } else {
                                 null
                             },
+                            onRename = if (!entry.virtual) {
+                                { onRename(entry) }
+                            } else {
+                                null
+                            },
                         )
                     }
                 }
@@ -936,6 +960,78 @@ private fun syncScopeOf(
     if (top.isBlank() || top !in state.syncRoots) return null
     val scope = entry.path.removePrefix(top).removePrefix("/")
     return Triple(top, scope, !entry.isDirectory)
+}
+
+/** 条目是否为「顶层导入目录」：改名会断开同步回原目录关联，需在对话框里提示。 */
+private fun isTopLevelSyncRoot(
+    area: WorkspaceStorageArea,
+    entry: WorkspaceFileEntry,
+    syncRoots: Set<String>,
+): Boolean {
+    if (!entry.isDirectory || entry.virtual || entry.name !in syncRoots) return false
+    return when (area) {
+        WorkspaceStorageArea.FILES -> '/' !in entry.path
+        WorkspaceStorageArea.LINUX -> entry.path == "${WorkspaceManager.ROOTFS_WORKSPACE_DIR}/${entry.name}"
+    }
+}
+
+@Composable
+private fun WorkspaceRenameDialog(
+    entry: WorkspaceFileEntry,
+    siblings: List<WorkspaceFileEntry>,
+    showSyncRootNote: Boolean,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val textState = rememberSyncedTextFieldState(entry.name)
+    val trimmed = textState.text.toString().trim()
+    val errorRes = when {
+        trimmed.isEmpty() -> R.string.workspace_detail_rename_error_empty
+        trimmed == "." || trimmed == ".." || trimmed.contains('/') ->
+            R.string.workspace_detail_rename_error_invalid
+        siblings.any { it.path != entry.path && it.name == trimmed } ->
+            R.string.workspace_detail_rename_error_exists
+        else -> null
+    }
+    val unchanged = trimmed == entry.name
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.workspace_detail_rename)) },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                if (showSyncRootNote) {
+                    Text(
+                        text = stringResource(R.string.workspace_detail_rename_sync_root_note),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 8.dp),
+                    )
+                }
+                ManagedTextField(
+                    state = textState,
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    isError = errorRes != null,
+                    supportingText = {
+                        errorRes?.let { res -> Text(stringResource(res)) }
+                    },
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(trimmed) },
+                enabled = errorRes == null && !unchanged,
+            ) {
+                Text(stringResource(R.string.common_confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.common_cancel))
+            }
+        },
+    )
 }
 
 @Composable
@@ -1007,6 +1103,7 @@ private fun WorkspaceFileCard(
     onShare: () -> Unit,
     onExportDir: (() -> Unit)? = null,
     onSyncToSource: (() -> Unit)? = null,
+    onRename: (() -> Unit)? = null,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     // 虚拟挂载目录（如 rootfs 里的 /workspace、/proc）不提供删除/导出等文件操作
@@ -1147,7 +1244,23 @@ private fun WorkspaceFileCard(
                                 onShare()
                             },
                         )
-                    } else if (onExportDir != null) {
+                    }
+                    if (onSyncToSource != null) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.workspace_detail_sync_to_source)) },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = HugeIcons.ArrowTurnBackward,
+                                    contentDescription = null,
+                                )
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                onSyncToSource()
+                            },
+                        )
+                    }
+                    if (entry.isDirectory && onExportDir != null) {
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.common_export)) },
                             leadingIcon = {
@@ -1162,18 +1275,18 @@ private fun WorkspaceFileCard(
                             },
                         )
                     }
-                    if (onSyncToSource != null) {
+                    if (onRename != null) {
                         DropdownMenuItem(
-                            text = { Text(stringResource(R.string.workspace_detail_sync_to_source)) },
+                            text = { Text(stringResource(R.string.workspace_detail_rename)) },
                             leadingIcon = {
                                 Icon(
-                                    imageVector = HugeIcons.ArrowTurnBackward,
+                                    imageVector = HugeIcons.Edit02,
                                     contentDescription = null,
                                 )
                             },
                             onClick = {
                                 menuExpanded = false
-                                onSyncToSource()
+                                onRename()
                             },
                         )
                     }

@@ -1194,6 +1194,11 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="workspace_detail_delete_directory">디렉터리 삭제</string>
   <string name="workspace_detail_delete_file">파일 삭제</string>
   <string name="workspace_detail_will_delete">%s을(를) 삭제합니다.</string>
+  <string name="workspace_detail_rename">이름 바꾸기</string>
+  <string name="workspace_detail_rename_sync_root_note">"이름을 바꾸면 '원래 위치로 동기화' 연결이 끊기고 동기화 기록과 스냅샷이 삭제됩니다."</string>
+  <string name="workspace_detail_rename_error_empty">이름은 비어 있을 수 없습니다</string>
+  <string name="workspace_detail_rename_error_invalid">이름에 / 는 쓸 수 없고 . 또는 .. 일 수 없습니다</string>
+  <string name="workspace_detail_rename_error_exists">같은 이름의 파일이나 폴더가 이미 있습니다</string>
   <string name="workspace_detail_installing">설치 중</string>
   <string name="workspace_detail_reinstall_rootfs">Rootfs 재설치</string>
   <string name="workspace_detail_install_rootfs">Rootfs 설치</string>

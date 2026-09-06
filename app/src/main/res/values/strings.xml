@@ -1251,6 +1251,11 @@
   <string name="workspace_detail_delete_directory">Delete Directory</string>
   <string name="workspace_detail_delete_file">Delete File</string>
   <string name="workspace_detail_will_delete">Will delete %s.</string>
+  <string name="workspace_detail_rename">Rename</string>
+  <string name="workspace_detail_rename_sync_root_note">Renaming will break its link to Sync back to original and clear its sync record and snapshot.</string>
+  <string name="workspace_detail_rename_error_empty">Name cannot be empty</string>
+  <string name="workspace_detail_rename_error_invalid">Name cannot contain /, and cannot be . or ..</string>
+  <string name="workspace_detail_rename_error_exists">A file or folder with the same name already exists</string>
   <string name="workspace_detail_installing">Installing</string>
   <string name="workspace_detail_reinstall_rootfs">Reinstall Rootfs</string>
   <string name="workspace_detail_install_rootfs">Install Rootfs</string>
