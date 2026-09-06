@@ -12,75 +12,121 @@
 
 #### Workspace
 
-1. **Directory Import & Smart Filtering**:
-   - Supports one-click import of entire folders into the workspace, complete with an import progress UI and a popup notification when import fails.
-   - Built-in recursive `.gitignore` parsing (supports negation rules and anchoring), along with support for custom exclusion patterns.
-   - **Same-Name Conflict Handling**:
-     - When an upload encounters a same-named file/directory, a `name (1).ext` copy is created by default.
-     - You can enable "Overwrite same-name items on upload" in the import settings; an "Import Preview" dialog appears for confirmation before overwriting.
-     - Overwrite logic follows `rsync --delete` semantics, ignoring excluded files.
+1. **File / Directory Import**:
+   - **New: directory import**
+     - Recursive `.gitignore` parsing and configurable custom exclusion patterns, with support for a fairly complete `.gitignore` syntax.
+     - An import progress UI and an import-settings card.
+   - **Same-name file / directory conflict handling**
+     - A "Same-name items" option was added to the workspace basic settings. It defaults to "Create copies" and can be switched to "Merge & overwrite".
+     - In "Create copies" mode, importing a file/directory whose name already exists creates `name (1).ext` / `name (1)`.
+     - "Merge & overwrite" behaves like `rsync --delete`, except files excluded by `.gitignore` or custom exclusion patterns are left untouched.
 
-2. **Directory Sync Back**:
-   - Supports syncing workspace files back to the original SAF directory.
-   - Provides two difference checking modes: "Quick (size comparison only)" and "Full (CRC32 content verification)".
-   - Provides a guided dialog: Scan (progress bar + countdown) → change preview → Execute.
-   - Sync logic follows `rsync --delete` semantics, ignoring excluded files.
+2. **Directory Sync-back / Export**:
+   - **Sync back to the original directory**
+     - Two difference-checking modes: Quick (size only) and Full (CRC32 content verification).
+     - Supports syncing the root directory as well as subdirectories/files.
+     - Base behavior is the same as `rsync --delete`, except files excluded by `.gitignore` or custom exclusion patterns are left untouched.
+     - Guided dialogs: Scan (with estimated time) → Preview → Execute.
+   - **Directory export**: export a directory to any SAF folder.
 
-#### Chat
+3. **File opening is now "best-effort"**
+   - Files with no extension or an unknown extension open in the built-in editor by default.
+   - Binary or oversized files offer "Open with another app" and "Share" as fallbacks.
+   - Explicitly non-text types (audio/video, archives, etc.) are still handed off to system apps.
 
-1. **Changed-File Detection Under Messages**:
-   - Added `workspace_shell` change detection; the list of changed files is automatically appended to the message metadata.
-   - If generation stops midway, the change list is automatically attached to the last shell tool message and is not lost.
+4. **Filesystem refinements**:
+   - **Consistent display**
+     - The "System/rootfs" root now overlays virtual mount directories (`/workspace`, `/skills`, `/upload`, `/tool_outputs`) on top of the real disk tree, so the display matches the actual contents.
+     - The path bar in the "Files" area now starts at `/workspace` instead of `/`, avoiding confusion.
+     - The interactive terminal now builds its `-b` arguments from the same bind-mount configuration as the file browser, also mounting `/upload` and `/tool_outputs`, eliminating drift between the terminal and the browser's mount configuration.
+     - The rootfs initialization marker was moved to `/var/lib/rikkahub` to avoid confusion.
+   - **Interaction refinements**: the file browser always shows the back button and remembers the scroll position per directory, so going back no longer resets the state.
 
-2. **Changed-File Display Under Messages**:
-   - Added a path display toggle for one-click switching between "filename only" and "full relative path".
-     - If all changed files belong to the same project directory, the project name prefix is automatically omitted.
-     - In full path mode, items are shown in a single column with horizontal scrolling to prevent long paths from wrapping.
-   - Added a collapse button; "filename only" and "full relative path" modes share the expanded/collapsed state.
-   - File tags support long-press to copy the current path to the clipboard, accompanied by a Toast notification.
+#### Messages
 
-3. **Faster Tool Calls**: Reduced the fixed overhead of `workspace_shell` tool calls, speeding up tool responses.
+1. **Chain-of-thought copy**: A button next to the AI message avatar lets you copy the model's chain of thought to the clipboard.
 
-4. **Enhanced Token Statistics**:
-   - Added the "Show Cumulative Token Usage" toggle (Preferences → Message Display).
-   - When enabled, shows the total input/output/cached tokens consumed by the conversation (including the context consumption accompanying tool results), consistent with the official console statistics.
-   - During generation, the message bottom updates the current message's consumption in real time; after generation finishes, it switches to the conversation cumulative total up to that message.
+2. **Chain-of-thought translation**:
+   - Translation and language-selection buttons were added next to the AI message avatar:
+     - One-tap toggle between the original text and the translation; the translation streams in just like the original chain of thought.
+     - The language button shows a flag emoji and defaults to the system language.
+   - Extended behavior for chains of thought spanning multiple tool calls:
+     - A "Reasoning Translate" option was added under Settings → Preferences → Experimental Features.
+     - Configurable: display mode (merge into the first card / keep separate cards), send mode (bundled / one by one), the separator used when sending bundled, and translate-button behavior (auto-expand the first card / expand all).
 
-5. **Message Info Bar Improvements**:
-   - Cached-hit percentage is now shown: `↑ xxx Tokens (xxx cached xx%)`.
-   - Token generation speed is now calculated based on pure generation time, excluding tool execution time, avoiding meaningless single-digit speed readings caused by tool runtime.
+3. **Tool-call optimizations**:
+   - Reduced the fixed overhead of `workspace_shell` tool calls: fewer processes are spawned per call.
+   - Tool-call titles are now fully displayed instead of being truncated.
 
-6. **Real-Time Token Price**:
-   - Added a "Real-Time Token Price" configuration under Settings → Providers → Model Advanced Settings; once configured, the chat title bar shows the price hint for the current time slot.
-   - Supports configuring weekdays, time ranges, price, unit, hint text, and background color.
-   - Hint text supports one-click insertion of template variables; colors use hex format, with quick selection of common colors and live preview while entering.
-   - A built-in "Other Times" row covers all unconfigured time slots, and can also serve as an all-day price.
+4. **Real-time Token price**:
+   - A "Real-time Token Price" option was added under Settings → Providers → Advanced Settings of a specific model.
+   - Supports configuring weekdays, time slots, price, unit, hint text, and a highlight background color.
+   - Once configured, the matching price hint is shown below the chat title bar for the current time slot.
 
-#### Extensions
+#### Messages – Misc
 
-1. **Image Compression**:
-   - Automatically compresses oversized images before sending them to the AI.
-   - Can be toggled and configured (max edge length, default 2048px) in Preferences → Experimental Features → Image Compression.
+1. **Changed files below messages**:
+   - **Improved change detection**: newly added and updated files are now shown based on actual workspace file changes.
+   - **Path display toggle**: switch between file names and full relative paths.
+   - A collapse toggle for changed files; file-name and full-relative-path modes share the expanded/collapsed state.
+   - Long-pressing a file tag copies the currently displayed path to the clipboard and shows a Toast.
 
-2. **Chain of Thought (CoT) Enhancements**:
-   - **One-Click Copy**: Added a one-click button next to the AI message avatar to copy the model's Chain of Thought.
-   - **Streaming Translation**: Added translation and language selection buttons next to the AI message avatar.
-     - Supports one-click toggling between original text and translated text.
-     - Translated text is generated in a streaming manner, just like the original CoT.
-     - The language button displays as a flag emoji, defaulting to the system language.
+2. **Message info bar**:
+   - A "Show Cumulative Token Usage" toggle was added under Settings → Preferences → UI Preferences:
+     - When enabled, input/output/cached tokens are accumulated and displayed following the official console's accounting.
+     - Every time a tool returns a result, the info bar updates this message's accumulated tokens in real time; after the message finishes, it shows the conversation's cumulative token count.
+   - **Cache-hit ratio is now shown**: ↑ xxx Tokens (xxx cached xx%)
+   - Token generation speed is now computed from pure generation time, excluding tool-call execution time.
+
+3. **Conversation interaction refinements**
+   - **Per-assistant folder memory and auto-archiving of new conversations**:
+     - Each assistant remembers the folder it last used and restores it after you leave and come back, or when you switch assistants.
+     - New conversations default to the currently selected folder instead of landing in Uncategorized.
+   - **Conversation list scroll position**:
+     - The scroll position of the drawer's conversation list is now remembered per "assistant + category", so switching assistants or categories resumes each view where you left off.
+     - When the current conversation is out of view, a "Back to current conversation" icon appears in the top-right corner of the list; tapping it scrolls back to that conversation.
+
+#### Global
+
+1. **Image compression**:
+   - Oversized images are automatically compressed before being sent to the AI.
+   - Can be toggled and its maximum dimension adjusted under Preferences → Experimental Features → Image Compression (default 2048 px).
+
+2. **Update improvements**:
+   - The update card was narrowed to a single line and expands on tap to show details.
+   - An option to pause updates permanently was added to the update display settings.
+
+3. **Unified text input implementation**:
+   - Input fields across messages, settings, editors, etc. now use a shared component whose base behavior aligns with the message input.
+   - Consistent cursor stability, no dropped characters, intermediate states allowed, and no conflicting persistence.
+   - Trade-off: real-time formatting and syntax highlighting were removed from JSON/script editors in favor of input stability; the platform's secure input fields are a special case and are excluded.
 
 ### Bug Fixes
 
-1. **Markdown / HTML Nested List Rendering Issues**:
-   - Fixed an issue where child ordered lists were incorrectly rendered as outer ordered lists.
-   - Fixed an issue where child lists were incorrectly appended to the end when interleaved with text within a list item.
-   - Optimized the vertical layout of multi-paragraph/block-level elements within list items to prevent horizontal squeezing or overflow.
+1. Message-related
+   - **Markdown / HTML nested-list rendering errors**:
+     - Fixed child ordered lists being incorrectly rendered as outer ordered lists.
+     - Fixed child lists being incorrectly moved to the end when text and sub-lists are interleaved within a list item.
+     - Improved the vertical layout of multi-paragraph/block-level elements inside list items so content is no longer squeezed horizontally or overflows the screen.
+   - Fixed an issue where, after collapsing the first long chain-of-thought card on some model messages, only the ending part remained.
 
-2. **Garbled Text in Release Builds**: Fixed an issue where class/property names in specific packages were obfuscated by R8, causing options on certain pages to display as garbled text.
+2. Info display
+   - Fixed the UI occasionally showing non-existent temporary files as changed files when an Agent modifies files via `workspace_shell`.
+   - Fixed tokens always showing 0 during streaming through OpenAI-compatible relays.
 
-3. **Workspace Temporary File Display Anomaly**: Fixed an issue where the UI incorrectly displayed non-existent temporary files as changed files when the Agent modified files using `workspace_shell`.
+3. Fixed garbled options on certain pages caused by R8 obfuscation renaming class/property names in specific packages.
 
-4. **Token Statistics Anomaly**: Fixed an issue where Token usage always displayed as 0 during streaming generation via OpenAI-compatible relays.
+4. Extensions (Workspace / Skill)
+   - Fixed `/tmp` and `/var/tmp` always disappearing; they are now cleared in content only.
+   - Fixed malformed Skills disappearing from the UI; they now show a warning and can be repaired.
+
+### Engineering & Localization
+
+1. Switched the Gradle software repositories to Aliyun mirrors to avoid download timeouts.
+
+2. Added app/proguard-rules.pro with `-keepnames` rules for all classes and members under `me.rerere.ai.provider` and `me.rerere.ai.core`, preserving class and member names so obfuscation does not break functionality.
+
+3. Removed the leftover root-level package.json and bun.lock from the i18n module.
 
 ## Download & Installation
 
@@ -148,7 +194,6 @@ pnpm install
 
 Configuring a release signing key is tedious, so we will borrow the Debug keystore here. **This is strictly for personal use**; otherwise, a proper release signature should be configured.
 ```bash
-cd ~/rikkahub
 cd ~/rikkahub && printf "storeFile=$HOME/.android/debug.keystore\nstorePassword=android\nkeyAlias=androiddebugkey\nkeyPassword=android\n" >> local.properties
 ./gradlew assembleRelease
 ```
