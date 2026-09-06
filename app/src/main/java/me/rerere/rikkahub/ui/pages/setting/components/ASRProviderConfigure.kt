@@ -305,7 +305,7 @@ private fun VolcengineASRConfiguration(
         ManagedTextField(
             state = rememberSyncedTextFieldState(setting.websocketUrl),
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("wss://openspeech.bytedance.com/api/v3/sauc/bigmodel") },
+            placeholder = { Text("wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async") },
             persistDebounceMs = 250,
             onPersist = { onValueChange(setting.copy(websocketUrl = it)) },
         )
@@ -318,7 +318,7 @@ private fun VolcengineASRConfiguration(
         ManagedTextField(
             state = rememberSyncedTextFieldState(setting.resourceId),
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("volc.bigasr.sauc.duration") },
+            placeholder = { Text("volc.seedasr.sauc.duration") },
             persistDebounceMs = 250,
             onPersist = { onValueChange(setting.copy(resourceId = it)) },
         )
@@ -336,6 +336,20 @@ private fun VolcengineASRConfiguration(
             onPersist = { onValueChange(setting.copy(language = it)) },
         )
     }
+    FormItem(
+        label = { Text(stringResource(R.string.setting_page_asr_silence_duration)) },
+        description = { Text(stringResource(R.string.setting_page_asr_silence_duration_desc)) },
+    ) {
+        OutlinedNumberInput(
+            value = setting.silenceDurationMs,
+            onValueChange = { value ->
+                if (value in 300..5000) onValueChange(setting.copy(silenceDurationMs = value))
+            },
+            modifier = Modifier.fillMaxWidth(),
+            label = stringResource(R.string.setting_page_asr_milliseconds),
+        )
+    }
+
 }
 
 @Composable

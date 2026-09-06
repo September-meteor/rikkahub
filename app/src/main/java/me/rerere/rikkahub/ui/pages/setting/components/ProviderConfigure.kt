@@ -245,18 +245,27 @@ private fun ProviderConfigureOpenAI(
         normalizeOnBlur = { it.trim() },
     )
 
-    if (!provider.useResponseApi) {
-        val chatCompletionsPathState = rememberTextFieldState(initialText = provider.chatCompletionsPath)
-        ManagedTextField(
-            state = chatCompletionsPathState,
-            label = { Text(stringResource(R.string.setting_provider_page_api_path)) },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !provider.builtIn,
-            persistDebounceMs = 300,
-            onPersist = { onEdit(provider.copy(chatCompletionsPath = it.trim())) },
-            normalizeOnBlur = { it.trim() },
-        )
-    }
+    // 自定义 API 路径：兼容 responses API 与 chat completions 两套路径（防抖输入框）
+    val pathState = rememberTextFieldState(
+        initialText = if (provider.useResponseApi) provider.responsesPath else provider.chatCompletionsPath
+    )
+    ManagedTextField(
+        state = pathState,
+        label = { Text(stringResource(R.string.setting_provider_page_api_path)) },
+        modifier = Modifier.fillMaxWidth(),
+        enabled = !provider.builtIn,
+        persistDebounceMs = 300,
+        onPersist = {
+            onEdit(
+                if (provider.useResponseApi) {
+                    provider.copy(responsesPath = it.trim())
+                } else {
+                    provider.copy(chatCompletionsPath = it.trim())
+                }
+            )
+        },
+        normalizeOnBlur = { it.trim() },
+    )
 
     Row(
         modifier = Modifier.fillMaxWidth(),
