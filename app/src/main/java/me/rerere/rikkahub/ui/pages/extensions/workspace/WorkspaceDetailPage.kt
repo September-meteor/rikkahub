@@ -49,7 +49,6 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -137,11 +136,6 @@ fun WorkspaceDetailPage(id: String) {
             vm.clearDirExportNotice()
         }
     }
-
-    // 每个目录（area+path）各保留一个独立的 LazyListState：
-    // 切换目录时旧目录的滚动状态对象不被销毁，返回时直接复用，即可原样恢复位置，
-    // 无需手动记录/换算偏移，不会跳动、不会逐次累积误差
-    val filesListStates = remember { mutableStateMapOf<String, LazyListState>() }
 
     // 新增：目录选择器（用于导入整个目录）
     val directoryPicker = rememberLauncherForActivityResult(
@@ -309,7 +303,7 @@ fun WorkspaceDetailPage(id: String) {
 
                 1 -> WorkspaceFilesPage(
                     state = state,
-                    listState = filesListStates.getOrPut("${state.area.name}:${state.path}") { LazyListState() },
+                    listState = vm.filesListStates.getOrPut("${state.area.name}:${state.path}") { LazyListState() },
                     contentPadding = PaddingValues(),
                     onSelectArea = vm::selectArea,
                     onGoUp = vm::goUp,

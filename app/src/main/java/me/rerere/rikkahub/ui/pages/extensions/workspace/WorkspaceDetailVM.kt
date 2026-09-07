@@ -5,8 +5,10 @@ import android.content.Intent
 import android.net.Uri
 import android.os.SystemClock
 import android.util.Log
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -53,6 +55,17 @@ class WorkspaceDetailVM(
 ) : ViewModel() {
     private val _state = MutableStateFlow(WorkspaceDetailState())
     val state = _state.asStateFlow()
+
+    /**
+     * 每个目录（area+path）各保留一个独立的 LazyListState：
+     * 切换目录时旧目录的滚动状态对象不被销毁，返回时直接复用，即可原样恢复位置，
+     * 无需手动记录/换算偏移，不会跳动、不会逐次累积误差。
+     *
+     * 状态必须放在 VM（而不是 Composable 的 remember）里：打开文本文件/终端会推入新的
+     * 导航条目，使 WorkspaceDetailPage 离开组合，remember 会被清空；而 VM 随本页导航条目
+     * 存活，从编辑器/终端返回后仍能拿到同一批 LazyListState，滚动位置原样恢复。
+     */
+    val filesListStates = mutableStateMapOf<String, LazyListState>()
 
     /**
      * 「自定义排除模式」输入框文本状态（对齐消息输入框逻辑）：
