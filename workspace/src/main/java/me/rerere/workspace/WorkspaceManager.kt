@@ -182,6 +182,39 @@ class WorkspaceManager(
         return fileSystem.resolve(location.rootDir, location.relativePath)
     }
 
+    /**
+     * 沙盒内绝对路径是否允许作为普通文件写回（编辑器据此决定是否放行保存）。
+     * 受保护（返回 false）：
+     * - 根 / 与各挂载点本身（/workspace、bind mount 目标）——无文件语义；
+     * - 内核伪文件系统 /dev、/proc、/sys——[resolveRootfsPath] 已显式拒绝。
+     * 其余（/workspace 下、bind mount 内、普通 rootfs 文件）一律放行。
+     */
+    fun isRootfsFileWritable(root: String, path: String): Boolean {
+        val trimmed = path.trim().trimEnd('/')
+        if (trimmed.isBlank() || trimmed == "/") return false
+        return try {
+            resolveRootfsPath(root, trimmed).relativePath.isNotBlank()
+        } catch (_: IllegalArgumentException) {
+            false
+        } catch (_: IllegalStateException) {
+            false
+        }
+    }
+
+    /** 按沙盒内绝对路径写文本（含 /workspace、bind mount 内真实文件），与 [exportRootfsFile] 读取对称。 */
+    fun writeRootfsText(
+        root: String,
+        path: String,
+        text: String,
+        overwrite: Boolean = true,
+        charset: Charset = StandardCharsets.UTF_8,
+    ): WorkspaceFileEntry {
+        val trimmed = path.trim().trimEnd('/')
+        val location = resolveRootfsPath(root, trimmed)
+        require(location.relativePath.isNotBlank()) { "Refusing to write a mount root: $path" }
+        return fileSystem.writeText(location.rootDir, location.relativePath, text, overwrite, charset)
+    }
+
     private fun File.requireReadableFile(path: String) {
         require(exists()) { "File does not exist: $path" }
         require(isFile) { "Path is not a file: $path" }

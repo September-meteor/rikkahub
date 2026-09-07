@@ -54,7 +54,10 @@ import java.io.File
 /**
  * 工作区文本文件编辑/预览页.
  *
- * FILES 区文件可编辑并保存; LINUX (rootfs) 区文件仅只读预览 (readOnly), 避免误改系统文件.
+ * 可编辑性按路径判定（[WorkspaceRepository.canEditText]）：
+ * - FILES 区：可编辑并保存；
+ * - LINUX (rootfs) 区：除根/各挂载点本身与内核伪文件系统（/dev、/proc、/sys）外，
+ *   一律放行编辑——含 /workspace、bind mount 内与普通 rootfs 文件，保存时按绝对路径解析写回。
  * 尽力而为：二进制 / 超大等无法以文本方式打开时，提供「用其它应用打开 / 分享」兜底，
  * 不再把这类文件静默交给系统应用。
  */
@@ -68,17 +71,19 @@ fun WorkspaceFileEditorPage(
     val toaster = LocalToaster.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val editable = area == WorkspaceStorageArea.FILES
     val fileName = path.substringAfterLast('/').ifBlank { path }
 
     val textState = rememberTextFieldState()
     var loading by remember { mutableStateOf(true) }
     var loadError by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
+    // 可编辑性取决于路径解析（LINUX 区大部分路径放行），异步判定后驱动 Save 按钮与 readOnly
+    var editable by remember { mutableStateOf(false) }
 
     LaunchedEffect(id, area, path) {
         loading = true
         loadError = null
+        editable = repository.canEditText(id, area, path)
         runCatching {
             repository.readTextForPreview(id, area, path)
         }.onSuccess { content ->
@@ -152,6 +157,7 @@ fun WorkspaceFileEditorPage(
                                     runCatching {
                                         repository.writeText(
                                             id = id,
+                                            area = area,
                                             path = path,
                                             text = textState.text.toString(),
                                             overwrite = true,

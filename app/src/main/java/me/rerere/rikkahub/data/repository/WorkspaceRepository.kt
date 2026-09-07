@@ -170,15 +170,38 @@ class WorkspaceRepository(
         manager.readText(workspace.root, path)
     }
 
+    /**
+     * 内置编辑器保存。按存储区路由：
+     * - FILES：相对工作区文件目录的路径，直接写回；
+     * - LINUX：沙盒内绝对路径（含 /workspace、bind mount），先解析到宿主真实文件再写回。
+     * 内核伪文件系统（/dev、/proc、/sys）与挂载点本身在解析阶段即被拒绝。
+     */
     suspend fun writeText(
         id: String,
+        area: WorkspaceStorageArea,
         path: String,
         text: String,
         overwrite: Boolean,
     ): WorkspaceFileEntry = withContext(Dispatchers.IO) {
         val workspace = dao.getById(id) ?: error("Workspace not found: $id")
         manager.ensureWorkspace(workspace.root)
-        manager.writeText(workspace.root, path, text, overwrite)
+        when (area) {
+            WorkspaceStorageArea.FILES -> manager.writeText(workspace.root, path, text, overwrite)
+            WorkspaceStorageArea.LINUX -> manager.writeRootfsText(workspace.root, path, text, overwrite)
+        }
+    }
+
+    /** 内置编辑器是否允许编辑该路径：FILES 全放行；LINUX 仅拒绝根/挂载点与内核伪文件系统。 */
+    suspend fun canEditText(
+        id: String,
+        area: WorkspaceStorageArea,
+        path: String,
+    ): Boolean = withContext(Dispatchers.IO) {
+        val workspace = dao.getById(id) ?: return@withContext false
+        when (area) {
+            WorkspaceStorageArea.FILES -> true
+            WorkspaceStorageArea.LINUX -> manager.isRootfsFileWritable(workspace.root, path)
+        }
     }
 
     /**
