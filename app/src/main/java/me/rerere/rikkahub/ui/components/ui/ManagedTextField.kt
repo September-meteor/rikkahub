@@ -182,17 +182,25 @@ fun ManagedTextField(
         }
     }
 
+    // 两个渲染分支（安全 / 普通）共享的派生参数，避免同一份逻辑写两遍。
+    // 分支内剩余的差异参数（textObfuscation* / readOnly / lineLimits）分属两个不同
+    // 组件的独有 API，无法再共用，属不可压缩的透传。
+    val effectiveModifier = modifier.then(focusModifier)
+    val effectiveIsError = isError || blurError != null
+    val effectiveLineLimits = if (singleLine) TextFieldLineLimits.SingleLine else lineLimits
+    val supportingTextContent: @Composable () -> Unit = {
+        blurError?.let { Text(it) } ?: supportingText?.invoke()
+    }
+
     if (textObfuscationMode != null) {
         // 密码/密钥：state 版安全输入框（新 API），掩码由调用方用 textObfuscationMode 切换（如 Hidden/Visible）
         OutlinedSecureTextField(
             state = state,
-            modifier = modifier.then(focusModifier),
+            modifier = effectiveModifier,
             label = label,
             placeholder = placeholder,
-            supportingText = {
-                blurError?.let { Text(it) } ?: supportingText?.invoke()
-            },
-            isError = isError || blurError != null,
+            supportingText = supportingTextContent,
+            isError = effectiveIsError,
             enabled = enabled,
             textStyle = textStyle,
             keyboardOptions = keyboardOptions,
@@ -204,16 +212,14 @@ fun ManagedTextField(
     } else {
         OutlinedTextField(
             state = state,
-            modifier = modifier.then(focusModifier),
+            modifier = effectiveModifier,
             label = label,
             placeholder = placeholder,
-            supportingText = {
-                blurError?.let { Text(it) } ?: supportingText?.invoke()
-            },
-            isError = isError || blurError != null,
+            supportingText = supportingTextContent,
+            isError = effectiveIsError,
             enabled = enabled,
             readOnly = readOnly,
-            lineLimits = if (singleLine) TextFieldLineLimits.SingleLine else lineLimits,
+            lineLimits = effectiveLineLimits,
             textStyle = textStyle,
             keyboardOptions = keyboardOptions,
             trailingIcon = trailingIcon,
