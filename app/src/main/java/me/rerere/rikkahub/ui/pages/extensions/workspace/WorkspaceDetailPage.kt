@@ -13,10 +13,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
@@ -71,6 +73,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowTurnBackward
+import me.rerere.hugeicons.stroke.Alert01
 import me.rerere.hugeicons.stroke.Bash
 import me.rerere.hugeicons.stroke.ComputerTerminal01
 import me.rerere.hugeicons.stroke.Delete01
@@ -315,32 +318,43 @@ fun WorkspaceDetailPage(id: String) {
                         when {
                             entry.isDirectory -> vm.open(entry)
 
-                            else -> when (entry.detectFileType()) {
-                                WorkspaceFileType.TEXT -> navController.navigate(
-                                    Screen.WorkspaceFileEditor(id, state.area.name, entry.path)
-                                )
+                            // 软链接目标不可达（悬空 / 越界 / 指向 rootfs 或内核伪文件系统）：
+                            // 提示后不跳转，避免再落入文本编辑器兜底
+                            entry.isSymlink && entry.resolvedPath == null -> toaster.show(
+                                context.getString(R.string.workspace_link_target_unreachable),
+                                type = ToastType.Error,
+                            )
 
-                                WorkspaceFileType.IMAGE -> vm.exportToCacheFile(entry, context.cacheDir) { file ->
-                                    // 传绝对路径 (而非 content:// URI): Coil 可直接加载,
-                                    // 预览弹窗的保存按钮 saveMessageImage 只认 "/" 开头路径, content URI 会报错
-                                    previewImageUri = file.absolutePath
-                                }
-
-                                WorkspaceFileType.OTHER -> vm.exportToCacheFile(entry, context.cacheDir) { file ->
-                                    val uri = FileProvider.getUriForFile(
-                                        context,
-                                        "${context.packageName}.fileprovider",
-                                        file,
+                            else -> {
+                                // 文件型软链接：以真实目标为准打开/编辑/预览（保存写回真实目标文件）
+                                val target = entry.openTarget()
+                                when (target.detectFileType()) {
+                                    WorkspaceFileType.TEXT -> navController.navigate(
+                                        Screen.WorkspaceFileEditor(id, state.area.name, target.path)
                                     )
-                                    val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(
-                                        file.extension.lowercase()
-                                    ) ?: "*/*"
-                                    val intent = Intent(Intent.ACTION_VIEW).apply {
-                                        setDataAndType(uri, mime)
-                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+
+                                    WorkspaceFileType.IMAGE -> vm.exportToCacheFile(target, context.cacheDir) { file ->
+                                        // 传绝对路径 (而非 content:// URI): Coil 可直接加载,
+                                        // 预览弹窗的保存按钮 saveMessageImage 只认 "/" 开头路径, content URI 会报错
+                                        previewImageUri = file.absolutePath
                                     }
-                                    runCatching {
-                                        context.startActivity(Intent.createChooser(intent, null))
+
+                                    WorkspaceFileType.OTHER -> vm.exportToCacheFile(target, context.cacheDir) { file ->
+                                        val uri = FileProvider.getUriForFile(
+                                            context,
+                                            "${context.packageName}.fileprovider",
+                                            file,
+                                        )
+                                        val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(
+                                            file.extension.lowercase()
+                                        ) ?: "*/*"
+                                        val intent = Intent(Intent.ACTION_VIEW).apply {
+                                            setDataAndType(uri, mime)
+                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                        }
+                                        runCatching {
+                                            context.startActivity(Intent.createChooser(intent, null))
+                                        }
                                     }
                                 }
                             }
@@ -412,7 +426,11 @@ fun WorkspaceDetailPage(id: String) {
     deleteTarget?.let { entry ->
         RikkaConfirmDialog(
             show = true,
-            title = if (entry.isDirectory) stringResource(R.string.workspace_detail_delete_directory) else stringResource(R.string.workspace_detail_delete_file),
+            title = if (entry.isDirectory && !entry.isSymlink) {
+                stringResource(R.string.workspace_detail_delete_directory)
+            } else {
+                stringResource(R.string.workspace_detail_delete_file)
+            },
             confirmText = stringResource(R.string.common_delete),
             dismissText = stringResource(R.string.common_cancel),
             onConfirm = {
@@ -895,7 +913,7 @@ private fun WorkspaceFilesPage(
                             onDelete = { onDelete(entry) },
                             onExport = { onExport(entry) },
                             onShare = { onShare(entry) },
-                            onExportDir = if (entry.isDirectory && state.area == WorkspaceStorageArea.FILES) {
+                            onExportDir = if (entry.isDirectory && !entry.isSymlink && state.area == WorkspaceStorageArea.FILES) {
                                 { onExportDir(entry) }
                             } else {
                                 null
@@ -950,6 +968,8 @@ private fun syncScopeOf(
     entry: WorkspaceFileEntry,
 ): Triple<String, String, Boolean>? {
     if (state.area != WorkspaceStorageArea.FILES) return null
+    // 软链接不直接提供「同步回原目录」入口：跳转到真实目标后按真实路径参与同步
+    if (entry.isSymlink) return null
     val top = entry.path.substringBefore('/')
     if (top.isBlank() || top !in state.syncRoots) return null
     val scope = entry.path.removePrefix(top).removePrefix("/")
@@ -962,11 +982,23 @@ private fun isTopLevelSyncRoot(
     entry: WorkspaceFileEntry,
     syncRoots: Set<String>,
 ): Boolean {
-    if (!entry.isDirectory || entry.virtual || entry.name !in syncRoots) return false
+    if (!entry.isDirectory || entry.virtual || entry.isSymlink || entry.name !in syncRoots) return false
     return when (area) {
         WorkspaceStorageArea.FILES -> '/' !in entry.path
         WorkspaceStorageArea.LINUX -> entry.path == "${WorkspaceManager.ROOTFS_WORKSPACE_DIR}/${entry.name}"
     }
+}
+
+/**
+ * 返回「实际要打开/编辑的目标」条目：
+ * - 文件型软链接：以解析后的真实目标为准（path=resolvedPath、name=目标文件名），
+ *   使类型判定、编辑器读写与导出缓存都作用在真实文件上（保存写回目标）；
+ * - 其它条目：原样返回。
+ */
+private fun WorkspaceFileEntry.openTarget(): WorkspaceFileEntry {
+    if (!isSymlink) return this
+    val target = resolvedPath ?: return this
+    return copy(path = target, name = target.substringAfterLast('/').ifBlank { name })
 }
 
 @Composable
@@ -1102,7 +1134,7 @@ private fun WorkspaceFileCard(
     var menuExpanded by remember { mutableStateOf(false) }
     // 虚拟挂载目录（如 rootfs 里的 /workspace、/proc）不提供删除/导出等文件操作
     val showMenuActions = !entry.virtual || onExportDir != null || onSyncToSource != null
-    val isImage = !entry.isDirectory && entry.detectFileType() == WorkspaceFileType.IMAGE
+    val isImage = !entry.isDirectory && !entry.isSymlink && entry.detectFileType() == WorkspaceFileType.IMAGE
     val imageFile by produceState<File?>(
         initialValue = null,
         key1 = if (isImage) area else null,
@@ -1193,13 +1225,32 @@ private fun WorkspaceFileCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Text(
-                    text = if (entry.isDirectory) entry.path else "${entry.path} · ${entry.sizeBytes.fileSizeToString()}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = when {
+                            entry.isSymlink -> "${entry.path} → ${entry.linkTarget.orEmpty()}"
+                            entry.isDirectory -> entry.path
+                            else -> "${entry.path} · ${entry.sizeBytes.fileSizeToString()}"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    // 无效（目标不可达）软链接：路径后面追加红色警告符号（同 SKILL.md 格式错误标识）
+                    if (entry.isSymlink && entry.resolvedPath == null) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(
+                            imageVector = HugeIcons.Alert01,
+                            contentDescription = stringResource(R.string.workspace_link_target_unreachable),
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
             }
             if (showMenuActions) Box {
                 IconButton(onClick = {
@@ -1211,7 +1262,7 @@ private fun WorkspaceFileCard(
                     expanded = menuExpanded,
                     onDismissRequest = { menuExpanded = false },
                 ) {
-                    if (!entry.isDirectory) {
+                    if (!entry.isDirectory && !entry.isSymlink) {
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.common_export)) },
                             leadingIcon = {

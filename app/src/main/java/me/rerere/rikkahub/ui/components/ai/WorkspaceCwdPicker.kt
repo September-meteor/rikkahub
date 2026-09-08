@@ -142,7 +142,8 @@ fun WorkspaceCwdPickerSheet(
                         },
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                         modifier = Modifier.clickable {
-                            browsePath = entry.path
+                            // 目录型软链接解析后 isDirectory=true：进入其真实目标目录
+                            browsePath = entry.resolvedPath ?: entry.path
                         },
                     )
                 }

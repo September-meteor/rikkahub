@@ -1475,6 +1475,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="workspace_detail_import_dir_failed">フォルダーのインポートに失敗しました</string>
   <string name="workspace_error_cannot_read_file">選択したファイルを読み取れません</string>
   <string name="workspace_error_cannot_access_dir">選択したフォルダーにアクセスできません</string>
+  <string name="workspace_link_target_unreachable">リンク先にアクセスできません（存在しない、範囲外、または別のストレージ領域）</string>
   <string name="workspace_error_area_dir_unavailable">ワークスペースのディレクトリが利用できません</string>
   <string name="workspace_unknown_error">不明なエラー</string>
   <string name="workspace_sync_stage_scan_internal">内部ファイルのスキャンに失敗しました：%1$s</string>

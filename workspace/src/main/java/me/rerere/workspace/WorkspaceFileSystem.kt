@@ -98,28 +98,30 @@ class WorkspaceFileSystem(
 
     fun delete(root: File, path: String, recursive: Boolean = false): Boolean {
         require(path.isNotBlank() && path != ".") { "Refusing to delete workspace root" }
-        val file = resolvePath(root, path)
-        if (!file.exists()) return false
-        return if (file.isDirectory) {
-            require(recursive) { "Directory delete requires recursive = true" }
-            file.deleteRecursively()
-        } else {
-            file.delete()
+        val file = resolveNoFollow(root, path)
+        if (!Files.isSymbolicLink(file.toPath())) {
+            if (!file.exists()) return false
+            return if (file.isDirectory) {
+                require(recursive) { "Directory delete requires recursive = true" }
+                file.deleteRecursively()
+            } else {
+                file.delete()
+            }
         }
+        // 符号链接：只删除链接本身，绝不跟随删除其目标
+        return Files.deleteIfExists(file.toPath())
     }
 
     fun move(root: File, source: String, target: String, overwrite: Boolean = false): WorkspaceFileEntry {
         require(source.isNotBlank() && source != ".") { "Refusing to move workspace root" }
-        val sourceFile = resolvePath(root, source)
-        val targetFile = resolvePath(root, target)
-        require(sourceFile.exists()) { "Source does not exist: $source" }
-        if (targetFile.exists()) {
+        val sourceFile = resolveNoFollow(root, source)
+        val targetFile = resolveNoFollow(root, target)
+        require(sourceFile.exists() || Files.isSymbolicLink(sourceFile.toPath())) {
+            "Source does not exist: $source"
+        }
+        if (targetFile.exists() || Files.isSymbolicLink(targetFile.toPath())) {
             require(overwrite) { "Target already exists: $target" }
-            if (targetFile.isDirectory) {
-                targetFile.deleteRecursively()
-            } else {
-                targetFile.delete()
-            }
+            delete(root, target, recursive = true)
         }
         targetFile.parentFile?.mkdirs()
         require(sourceFile.renameTo(targetFile)) {
@@ -197,6 +199,32 @@ class WorkspaceFileSystem(
             block(stream.iterator().asSequence())
         }
 
+    /**
+     * 解析路径但不跟随末级符号链接：
+     * 删除/移动/重命名链接条目本身时使用（resolvePath 的 canonicalFile 会跟到真实目标，
+     * 导致误删/误移动目标文件）。中间目录仍做 canonical 校验，防越界逃逸。
+     */
+    private fun resolveNoFollow(root: File, path: String): File {
+        val normalized = path
+            .replace('\\', '/')
+            .trim()
+            .trimStart('/')
+            .ifBlank { "." }
+        require(!normalized.contains('\u0000')) { "Path contains invalid character" }
+
+        val rootFile = root.canonicalFile
+        if (normalized == ".") return rootFile
+        val raw = File(rootFile, normalized)
+        // 父目录 canonical（跟随中间环节的链接做越界校验），末级名称保持原样（不跟随链接）
+        val parentCanonical = (raw.parentFile ?: rootFile).canonicalFile
+        val rootPath = rootFile.path
+        val parentPath = parentCanonical.path
+        require(parentPath == rootPath || parentPath.startsWith(rootPath + File.separator)) {
+            "Path escapes workspace root: $path"
+        }
+        return File(parentCanonical, raw.name)
+    }
+
     private fun resolvePath(root: File, path: String): File {
         root.mkdirs()
         val normalized = path
@@ -218,13 +246,20 @@ class WorkspaceFileSystem(
 
     fun resolve(root: File, path: String): File = resolvePath(root, path)
 
-    private fun File.toEntry(root: File): WorkspaceFileEntry = WorkspaceFileEntry(
-        path = relativePath(root),
-        name = name,
-        isDirectory = isDirectory,
-        sizeBytes = if (isFile) length() else 0L,
-        updatedAt = lastModified(),
-    )
+    private fun File.toEntry(root: File): WorkspaceFileEntry {
+        val isLink = Files.isSymbolicLink(toPath())
+        return WorkspaceFileEntry(
+            path = relativePath(root),
+            name = name,
+            // 保留宿主 File 语义（isDirectory/isFile 跟随链接）；沙盒绝对路径链接在宿主上
+            // 无法跟随时会自然落到 false/0，真实类型由 WorkspaceManager 按沙盒语义解析后回填
+            isDirectory = isDirectory,
+            sizeBytes = if (isFile) length() else 0L,
+            updatedAt = lastModified(),
+            isSymlink = isLink,
+            linkTarget = if (isLink) Files.readSymbolicLink(toPath()).toString() else null,
+        )
+    }
 
     private fun File.relativePath(root: File): String {
         val rootCanonical = root.canonicalFile

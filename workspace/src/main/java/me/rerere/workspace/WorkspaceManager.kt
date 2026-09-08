@@ -6,6 +6,7 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 
 class WorkspaceManager(
     private val baseDir: File,
@@ -49,8 +50,111 @@ class WorkspaceManager(
         root: String,
         path: String = "",
         area: WorkspaceStorageArea = WorkspaceStorageArea.FILES,
-    ): List<WorkspaceFileEntry> =
-        fileSystem.list(areaDir(root, area), path)
+    ): List<WorkspaceFileEntry> {
+        val entries = fileSystem.list(areaDir(root, area), path)
+        if (area != WorkspaceStorageArea.FILES) return entries
+        // FILES 区：链接可跳转目标限定在 /workspace（filesDir）内，rootfs 内部视为不可达。
+        // fileSystem.list 返回的相对路径相对 filesDir 根（含当前浏览目录前缀），
+        // 因此沙盒绝对路径 = /workspace/<entry.path>，父目录可直接从中推导。
+        return entries
+            .map { entry ->
+                if (entry.isSymlink) {
+                    val linkSandboxAbs = if (entry.path.isBlank()) {
+                        ROOTFS_WORKSPACE_DIR
+                    } else {
+                        "$ROOTFS_WORKSPACE_DIR/${entry.path}"
+                    }
+                    resolveLink(root, WorkspaceStorageArea.FILES, linkSandboxAbs, entry)
+                } else {
+                    entry
+                }
+            }
+            .sortedWith(ROOTFS_ENTRY_ORDER)
+    }
+
+    /**
+     * 按沙盒语义解析符号链接的真实目标，返回修正后的条目：
+     * - [WorkspaceFileEntry.isDirectory] / [WorkspaceFileEntry.sizeBytes] 改为目标真实值；
+     * - [WorkspaceFileEntry.resolvedPath] 填目标路径（FILES：相对 filesDir；LINUX：沙盒绝对路径）；
+     * - 目标不可达（悬空 / 越出当前区可表达范围 / 内核伪文件系统 / 解析超深）时：
+     *   resolvedPath = null，并按普通 0 字节文件展示，点击给出提示。
+     *
+     * [linkSandboxAbs] 是链接自身所在的沙盒绝对路径（FILES 区为 /workspace/...，
+     * LINUX 区即根目录浏览给出的绝对路径），用于把相对链接目标换算成绝对目标。
+     */
+    private fun resolveLink(
+        root: String,
+        area: WorkspaceStorageArea,
+        linkSandboxAbs: String,
+        entry: WorkspaceFileEntry,
+    ): WorkspaceFileEntry {
+        val rawTarget = entry.linkTarget ?: return entry.asUnreachableLink()
+        var currentLinkAbs = linkSandboxAbs
+        var pendingTarget = rawTarget
+        repeat(MAX_SYMLINK_HOPS) { hop ->
+            val parent = currentLinkAbs.substringBeforeLast('/', missingDelimiterValue = "/")
+            val combined = if (pendingTarget.startsWith('/')) pendingTarget else "$parent/$pendingTarget"
+            val targetAbs = normalizeSandboxPath(combined)
+
+            // FILES 区：跳转目标必须是 /workspace 内（filesDir），跨到 rootfs 视为不可达
+            if (area == WorkspaceStorageArea.FILES) {
+                val inWorkspace = targetAbs == ROOTFS_WORKSPACE_DIR ||
+                    targetAbs.startsWith("$ROOTFS_WORKSPACE_DIR/")
+                if (!inWorkspace) return entry.asUnreachableLink()
+            }
+            if (isKernelMountPath(targetAbs)) return entry.asUnreachableLink()
+
+            // 把沙盒绝对目标换算回宿主文件，判断真实类型/存在性
+            val hostFile = resolveTargetHostFile(root, targetAbs) ?: return entry.asUnreachableLink()
+            if (Files.isSymbolicLink(hostFile.toPath())) {
+                // 目标仍是链接：继续跟随（以目标自身的沙盒绝对路径为基准）
+                currentLinkAbs = targetAbs
+                pendingTarget = Files.readSymbolicLink(hostFile.toPath()).toString()
+                return@repeat
+            }
+            if (!hostFile.exists()) return entry.asUnreachableLink()
+            val isDir = hostFile.isDirectory
+            val size = if (hostFile.isFile) hostFile.length() else 0L
+            val resolved = when (area) {
+                WorkspaceStorageArea.FILES ->
+                    if (targetAbs == ROOTFS_WORKSPACE_DIR) {
+                        ""
+                    } else {
+                        targetAbs.removePrefix("$ROOTFS_WORKSPACE_DIR/")
+                    }
+                WorkspaceStorageArea.LINUX -> targetAbs
+            }
+            return entry.copy(
+                isDirectory = isDir,
+                sizeBytes = if (isDir) 0L else size,
+                updatedAt = if (isDir) entry.updatedAt else hostFile.lastModified().coerceAtLeast(entry.updatedAt),
+                resolvedPath = resolved,
+            )
+        }
+        return entry.asUnreachableLink()
+    }
+
+    /** 沙盒绝对路径 -> 宿主真实文件；不可映射（内核伪文件系统/越界）返回 null */
+    private fun resolveTargetHostFile(root: String, sandboxAbs: String): File? = try {
+        val location = resolveRootfsPath(root, sandboxAbs)
+        val host = if (location.relativePath.isBlank()) {
+            location.rootDir
+        } else {
+            File(location.rootDir, location.relativePath)
+        }
+        host
+    } catch (_: IllegalArgumentException) {
+        null
+    } catch (_: IllegalStateException) {
+        null
+    }
+
+    /** 符号链接目标不可达时的展示形态：普通 0 字节文件 + 无 resolvedPath */
+    private fun WorkspaceFileEntry.asUnreachableLink(): WorkspaceFileEntry = copy(
+        isDirectory = false,
+        sizeBytes = 0L,
+        resolvedPath = null,
+    )
 
     fun readText(
         root: String,
@@ -220,6 +324,25 @@ class WorkspaceManager(
         require(isFile) { "Path is not a file: $path" }
     }
 
+    /**
+     * 规范化沙盒绝对路径（字符串级，不访问文件系统）：
+     * 折叠重复斜杠与 "."，按段解析 ".."（不可越过根 "/"）。
+     */
+    private fun normalizeSandboxPath(path: String): String {
+        val normalized = path.trim().replace('\\', '/')
+        val isAbs = normalized.startsWith('/')
+        val segments = ArrayDeque<String>()
+        normalized.split('/').forEach { segment ->
+            when (segment) {
+                "", "." -> Unit
+                ".." -> if (segments.isNotEmpty()) segments.removeLast()
+                else -> segments.addLast(segment)
+            }
+        }
+        val joined = segments.joinToString("/")
+        return if (isAbs) "/$joined" else joined
+    }
+
     /** bind mount 表：供 rootfs 虚拟浏览与交互终端生成 -b 参数共用，避免挂载配置漂移 */
     fun bindMounts(): List<WorkspaceBindMount> = bindMounts
 
@@ -235,19 +358,23 @@ class WorkspaceManager(
         // 内核伪文件系统对 App 进程不可枚举（/dev、/sys 受 SELinux 保护，
         // /proc 内容为内核特殊文件），文件浏览中一律按空目录展示
         if (isKernelMountPath(raw)) return emptyList()
-        if (raw.isEmpty() || raw == "/") {
+        val entries = if (raw.isEmpty() || raw == "/") {
             val virtual = rootfsVirtualEntries(root)
             val virtualNames = virtual.mapTo(mutableSetOf()) { it.name }
             val disk = fileSystem.list(linuxDir(root), "")
                 .filter { it.name !in virtualNames }
                 .map { it.copy(path = "/${it.path}") }
-            return (virtual + disk).sortedWith(ROOTFS_ENTRY_ORDER)
+            (virtual + disk)
+        } else {
+            val location = resolveRootfsPath(root, raw)
+            val prefix = rootfsPrefixOf(root, location.rootDir)
+            val base = if (prefix.isEmpty()) "/" else "$prefix/"
+            fileSystem.list(location.rootDir, location.relativePath)
+                .map { it.copy(path = base + it.path) }
         }
-        val location = resolveRootfsPath(root, raw)
-        val prefix = rootfsPrefixOf(root, location.rootDir)
-        val base = if (prefix.isEmpty()) "/" else "$prefix/"
-        return fileSystem.list(location.rootDir, location.relativePath)
-            .map { it.copy(path = base + it.path) }
+        // 符号链接按沙盒语义解析真实目标（相对/绝对、可指向 /workspace 与 rootfs 内部）
+        return entries
+            .map { entry -> if (entry.isSymlink) resolveLink(root, WorkspaceStorageArea.LINUX, entry.path, entry) else entry }
             .sortedWith(ROOTFS_ENTRY_ORDER)
     }
 
@@ -463,6 +590,9 @@ class WorkspaceManager(
         private const val LINUX_DIR = "linux"
         private const val TEMP_DIR = "tmp"
         const val DEFAULT_COMMAND_TIMEOUT_MS = 30_000L
+
+        /** 符号链接链跟随最大深度（防环） */
+        private const val MAX_SYMLINK_HOPS = 16
 
         /** Rootfs 内工作区文件区的挂载点 */
         const val ROOTFS_WORKSPACE_DIR = "/workspace"

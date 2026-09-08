@@ -1477,6 +1477,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="workspace_detail_import_dir_failed">导入目录失败</string>
   <string name="workspace_error_cannot_read_file">无法读取所选文件</string>
   <string name="workspace_error_cannot_access_dir">无法访问所选目录</string>
+  <string name="workspace_link_target_unreachable">链接目标不可达（不存在、越界或在其它存储区）</string>
   <string name="workspace_error_area_dir_unavailable">工作区目录不可用</string>
   <string name="workspace_unknown_error">未知错误</string>
   <string name="workspace_sync_stage_scan_internal">扫描内部文件失败：%1$s</string>

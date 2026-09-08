@@ -1475,6 +1475,7 @@
   <string name="workspace_detail_import_dir_failed">Не удалось импортировать папку</string>
   <string name="workspace_error_cannot_read_file">Не удалось прочитать выбранный файл</string>
   <string name="workspace_error_cannot_access_dir">Не удалось открыть выбранную папку</string>
+  <string name="workspace_link_target_unreachable">Цель ссылки недоступна (не существует, вне границ или в другой области хранения)</string>
   <string name="workspace_error_area_dir_unavailable">Каталог рабочей области недоступен</string>
   <string name="workspace_unknown_error">Неизвестная ошибка</string>
   <string name="workspace_sync_stage_scan_internal">Не удалось просканировать внутренние файлы: %1$s</string>

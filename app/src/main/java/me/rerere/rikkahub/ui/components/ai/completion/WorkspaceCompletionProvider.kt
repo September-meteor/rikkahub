@@ -97,7 +97,8 @@ class WorkspaceCompletionProvider(
                     result += entry
                 }
                 if (entry.isDirectory && queue.size < MAX_INDEXED_DIRS && seenDirs.add(entry.path)) {
-                    queue.add(entry.path)
+                    // 目录型软链接解析后是真实目录：递归下钻用真实目标，避免进入链接本身
+                    queue.add(entry.resolvedPath ?: entry.path)
                 }
             }
         }

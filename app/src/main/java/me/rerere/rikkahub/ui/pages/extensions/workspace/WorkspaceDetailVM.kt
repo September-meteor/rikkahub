@@ -115,7 +115,8 @@ class WorkspaceDetailVM(
 
     fun open(entry: WorkspaceFileEntry) {
         if (!entry.isDirectory) return
-        _state.update { it.copy(path = entry.path, entries = emptyList(), error = null) }
+        // 目录型软链接解析后是真实目录（resolvedPath）；普通目录/虚拟目录无 resolvedPath，走自身路径
+        _state.update { it.copy(path = entry.resolvedPath ?: entry.path, entries = emptyList(), error = null) }
         refresh()
     }
 
@@ -168,7 +169,8 @@ class WorkspaceDetailVM(
                     id = id,
                     area = state.value.area,
                     path = entry.path,
-                    recursive = entry.isDirectory,
+                    // 软链接只删除链接本身，绝不递归删除其目标目录/文件
+                    recursive = entry.isDirectory && !entry.isSymlink,
                 )
             }.onSuccess {
                 refresh()
@@ -210,7 +212,7 @@ class WorkspaceDetailVM(
 
     /** 条目是否为「顶层导入目录」（其名字即同步根 syncRoot，改名会断开同步回原目录关联）。 */
     private fun topLevelSyncRootOf(entry: WorkspaceFileEntry, area: WorkspaceStorageArea): String? {
-        if (!entry.isDirectory || entry.virtual) return null
+        if (!entry.isDirectory || entry.virtual || entry.isSymlink) return null
         return when (area) {
             WorkspaceStorageArea.FILES ->
                 if ('/' !in entry.path) entry.name else null
