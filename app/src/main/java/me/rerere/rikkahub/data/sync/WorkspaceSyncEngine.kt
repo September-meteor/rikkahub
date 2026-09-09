@@ -12,24 +12,27 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
+import me.rerere.rikkahub.data.workspace.GitignoreRules
 import me.rerere.rikkahub.utils.fileSizeToString
 import me.rerere.workspace.WorkspaceStorageArea
 import java.io.File
 import java.io.InputStream
 import java.util.zip.CRC32
 
-/** 内部扫描结果：文件状态 + 目录指纹 + 空目录列表 */
+/** 内部扫描结果：文件状态 + 目录指纹 + 逻辑空目录 + 物理真空目录 */
 data class InternalScanResult(
     val files: Map<String, SyncFileState>,
     val directories: Map<String, DirFingerprint>,
     val emptyDirs: Set<String> = emptySet(),
+    val physicallyEmptyDirs: Set<String> = emptySet(),
 )
 
-/** 外部扫描结果：文件状态（hash 懒加载，未计算为 ""）+ 目录指纹 + 空目录列表 */
+/** 外部扫描结果：文件状态（hash 懒加载，未计算为 ""）+ 目录指纹 + 逻辑空目录 + 物理真空目录 */
 data class ExternalScanResult(
     val files: Map<String, SyncFileState>,
     val directories: Map<String, DirFingerprint>,
     val emptyDirs: Set<String> = emptySet(),
+    val physicallyEmptyDirs: Set<String> = emptySet(),
 )
 
 /**
@@ -116,7 +119,7 @@ object WorkspaceSyncEngine {
     suspend fun scanInternal(
         filesDir: File,
         syncRoot: String,
-        rules: WorkspaceIgnoreRules,
+        rules: GitignoreRules,
         withHash: Boolean = true,
         onProgress: suspend (done: Int, total: Int) -> Unit = { _, _ -> },
         scope: String = "",
@@ -126,6 +129,7 @@ object WorkspaceSyncEngine {
         val files = linkedMapOf<String, SyncFileState>()
         val directories = linkedMapOf<String, DirFingerprint>()
         val emptyDirs = linkedSetOf<String>()
+        val physicallyEmptyDirs = linkedSetOf<String>()
 
         /** 返回该目录子树内的可见文件总数（用于判定空目录） */
         suspend fun walk(dir: File, parentKey: String): Int {
@@ -161,8 +165,15 @@ object WorkspaceSyncEngine {
             }
             subtreeFileCount += directFileCount
             directories[parentKey] = dirFingerprint(entries, directFileCount)
+            // 空目录 = 子树无可见文件（逻辑空），作为结构镜像对象记录：
+            // 源侧存在 → 目标侧应创建（含仅含被忽略内容的目录）
             if (subtreeFileCount == 0 && parentKey.isNotEmpty()) {
                 emptyDirs += parentKey
+            }
+            // 物理真空目录单独记录：删除阶段只删得了真空目录，
+            // DELETE_DIR 判定必须用它，否则目录含被忽略内容删不掉 → 幽灵预览
+            if (parentKey.isNotEmpty() && children.isEmpty()) {
+                physicallyEmptyDirs += parentKey
             }
             return subtreeFileCount
         }
@@ -194,7 +205,7 @@ object WorkspaceSyncEngine {
                 }
             }
         }
-        InternalScanResult(files, directories, emptyDirs)
+        InternalScanResult(files, directories, emptyDirs, physicallyEmptyDirs)
     }
 
     /**
@@ -226,7 +237,7 @@ object WorkspaceSyncEngine {
     suspend fun scanExternalFast(
         context: Context,
         rootDoc: DocumentFile,
-        rules: WorkspaceIgnoreRules,
+        rules: GitignoreRules,
         snapshot: SyncSnapshot?,
         docCache: DocumentCache? = null,
         onProgress: suspend (done: Int, total: Int, totalEstimated: Boolean) -> Unit = { _, _, _ -> },
@@ -238,6 +249,7 @@ object WorkspaceSyncEngine {
         val files = linkedMapOf<String, SyncFileState>()
         val directories = linkedMapOf<String, DirFingerprint>()
         val emptyDirs = linkedSetOf<String>()
+        val physicallyEmptyDirs = linkedSetOf<String>()
 
         // 快照子树文件数（每个目录路径 → 该子树内可见文件总数），用于逐目录修正估计总数
         val snapshotSubtreeCounts = subtreeFileCounts(snapshot)
@@ -337,8 +349,13 @@ object WorkspaceSyncEngine {
             // 目录完成：上报修正后的总数（UI 据此更新「xxx」与「预估/更新」）
             reportProgress()
 
+            // 空目录 = 子树无可见文件（逻辑空），作为结构镜像对象记录
             if (subtreeFileCount == 0 && parentKey.isNotEmpty()) {
                 emptyDirs += parentKey
+            }
+            // 物理真空目录：删除阶段只删得了真空目录，用于 DELETE_DIR 判定
+            if (parentKey.isNotEmpty() && children.isEmpty()) {
+                physicallyEmptyDirs += parentKey
             }
             return subtreeFileCount
         }
@@ -367,7 +384,7 @@ object WorkspaceSyncEngine {
                 }
             }
         }
-        ExternalScanResult(files, directories, emptyDirs)
+        ExternalScanResult(files, directories, emptyDirs, physicallyEmptyDirs)
     }
 
     /**
@@ -399,7 +416,7 @@ object WorkspaceSyncEngine {
     fun loadGitignoreTree(
         context: Context,
         rootDoc: DocumentFile,
-        rules: WorkspaceIgnoreRules,
+        rules: GitignoreRules,
         docCache: DocumentCache? = null,
     ) {
         val resolver = context.contentResolver
@@ -437,7 +454,7 @@ object WorkspaceSyncEngine {
         resolver: ContentResolver,
         rootDoc: DocumentFile,
         scope: String,
-        rules: WorkspaceIgnoreRules,
+        rules: GitignoreRules,
         docCache: DocumentCache?,
     ) {
         runCatching { rules.loadGitignore(rootDoc, "", resolver) }
@@ -470,7 +487,7 @@ object WorkspaceSyncEngine {
     fun loadLocalGitignoreTree(
         filesDir: File,
         syncRoot: String,
-        rules: WorkspaceIgnoreRules,
+        rules: GitignoreRules,
     ) {
         val root = File(filesDir, syncRoot)
         if (!root.isDirectory) return
@@ -500,25 +517,27 @@ object WorkspaceSyncEngine {
      *   并发批量计算 CRC32（[HASH_CONCURRENCY] 个协程一批），每算完一批回调一次 [onHashProgress]；
      *   任一文件内容校验失败 → 跳过该文件（视为无变更），不中断整体。
      *
-     * 空目录（[internalDirs] / [externalDirs]，整棵子树无可见文件）：
-     * A 有 C 无 → CREATE_DIR；C 有 A 无 → DELETE_DIR。
+     * 空目录镜像采用 rsync --delete + 忽略排除 语义（[mirrorDirItems]）：
+     * 目录存在性由两侧扫描的 directories 判定，与“是否为空”无关；
+     * 空目录只在创建侧需要显式 CREATE_DIR（非空目录由文件写入 mkdirs 顺带创建），
+     * 删除仅针对权威侧完全没有的“野目录”，且该目录必须物理真空。
      *
      * @param invert true = 导入覆盖方向（源为 C 侧 external、目标为 A 侧 internal）：
-     * CREATE/DELETE 语义反转（A 无 C 有 → 写入 A；C 无 A 有 → 删除 A；空目录同理）。
+     * CREATE/DELETE 语义反转（A 无 C 有 → 写入 A；C 无 A 有 → 删除 A；目录同理）。
      * 内容比对（ACCURATE）不受影响：A 侧 hash 由调用方预计算（withHash=true），C 侧从 rootDoc 现算。
      */
     suspend fun computePreview(
         context: Context,
         rootDoc: DocumentFile,
-        internal: Map<String, SyncFileState>,
-        external: Map<String, SyncFileState>,
-        internalDirs: Set<String> = emptySet(),
-        externalDirs: Set<String> = emptySet(),
+        internalScan: InternalScanResult,
+        externalScan: ExternalScanResult,
         mode: SyncCheckMode = SyncCheckMode.ACCURATE,
         docCache: DocumentCache? = null,
         onHashProgress: suspend (done: Int, total: Int) -> Unit = { _, _ -> },
         invert: Boolean = false,
     ): List<SyncPreviewItem> = withContext(Dispatchers.IO) {
+        val internal = internalScan.files
+        val external = externalScan.files
         val items = mutableListOf<SyncPreviewItem>()
         // 存在性 + 尺寸差异（两种模式都走这一遍）
         val sameSizePaths = mutableListOf<String>()
@@ -568,20 +587,68 @@ object WorkspaceSyncEngine {
                 }
             }
         }
-        // 空目录：A 有 C 无 → 创建；C 有 A 无 → 删除（导入覆盖方向反转）
-        for (dir in internalDirs - externalDirs) {
-            items += SyncPreviewItem(
-                type = if (invert) SyncPreviewType.DELETE_DIR else SyncPreviewType.CREATE_DIR,
-                path = dir,
-            )
+        // 目录镜像（rsync --delete + 忽略排除），语义见 mirrorDirItems
+        items += mirrorDirItems(internalScan, externalScan, invert)
+        // DELETE_DIR 若与「将要写入的路径」矛盾（本地空目录将被 CREATE/CREATE_DIR/MODIFY 重建）
+        // 则剔除：写入阶段会 mkdirs 补齐父目录链，保留只会让预览自相矛盾
+        // （如「新增 a/x 的同时删除 a/」）。
+        filterContradictoryDirDeletes(items)
+            .sortedWith(compareBy({ it.type.ordinal }, { it.path }))
+    }
+
+    /**
+     * rsync --delete + 忽略排除 语义下的目录镜像操作：
+     * - 空目录是结构对象：创建侧存在“逻辑空目录”（[InternalScanResult.emptyDirs] /
+     *   [ExternalScanResult.emptyDirs]，含仅被忽略内容的目录）而目标侧没有该目录时 → CREATE_DIR；
+     *   非空目录由文件写入 mkdirs 顺带创建，不在此列。
+     * - 删除仅针对创建侧（权威侧）完全没有、目标侧多余的“野目录”，且目标侧该目录必须物理真空
+     *   （[physicallyEmptyDirs]）：否则目录含被忽略内容删不掉，会产生「预览反复显示删除但永不执行」的幽灵项。
+     *
+     * @param invert true = 导入覆盖（在 internal 侧创建/删除，external 为权威）；
+     *               false = 同步（在 external 侧创建/删除，internal 为权威）
+     */
+    internal fun mirrorDirItems(
+        internalScan: InternalScanResult,
+        externalScan: ExternalScanResult,
+        invert: Boolean,
+    ): List<SyncPreviewItem> {
+        val internalAll = internalScan.directories.keys
+        val externalAll = externalScan.directories.keys
+        val result = mutableListOf<SyncPreviewItem>()
+        if (invert) {
+            for (dir in externalScan.emptyDirs - internalAll) {
+                result += SyncPreviewItem(type = SyncPreviewType.CREATE_DIR, path = dir)
+            }
+            for (dir in (internalAll - externalAll).intersect(internalScan.physicallyEmptyDirs)) {
+                result += SyncPreviewItem(type = SyncPreviewType.DELETE_DIR, path = dir)
+            }
+        } else {
+            for (dir in internalScan.emptyDirs - externalAll) {
+                result += SyncPreviewItem(type = SyncPreviewType.CREATE_DIR, path = dir)
+            }
+            for (dir in (externalAll - internalAll).intersect(externalScan.physicallyEmptyDirs)) {
+                result += SyncPreviewItem(type = SyncPreviewType.DELETE_DIR, path = dir)
+            }
         }
-        for (dir in externalDirs - internalDirs) {
-            items += SyncPreviewItem(
-                type = if (invert) SyncPreviewType.CREATE_DIR else SyncPreviewType.DELETE_DIR,
-                path = dir,
-            )
+        return result
+    }
+
+    /**
+     * 剔除与「将要写入的路径」矛盾的 DELETE_DIR：
+     * 目标目录会被 CREATE / CREATE_DIR / MODIFY 重建（写入阶段 mkdirs 补齐父链），
+     * 保留这类 DELETE_DIR 会产生自相矛盾的预览。
+     */
+    internal fun filterContradictoryDirDeletes(items: List<SyncPreviewItem>): List<SyncPreviewItem> {
+        val repopulating = items.filter {
+            it.type == SyncPreviewType.CREATE ||
+                it.type == SyncPreviewType.MODIFY ||
+                it.type == SyncPreviewType.CREATE_DIR
         }
-        items.sortedWith(compareBy({ it.type.ordinal }, { it.path }))
+        if (repopulating.isEmpty()) return items
+        return items.filterNot { item ->
+            item.type == SyncPreviewType.DELETE_DIR &&
+                repopulating.any { it.path == item.path || it.path.startsWith("${item.path}/") }
+        }
     }
 
     /**

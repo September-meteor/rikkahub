@@ -1,17 +1,20 @@
 package me.rerere.rikkahub.data.ai.workspace
 
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
+import me.rerere.rikkahub.data.workspace.GitignoreRules
 import java.util.concurrent.ConcurrentHashMap
 
 /**
  * 工作区忽略规则加载器（聊天变更列表专用）。
  *
- * 匹配逻辑复用 [WorkspaceIgnoreMatcher]（原 `@` 文件补全实现，上移到本包共用），
- * 这里只负责：读工作区配置（`enableGitignore` + `customIgnorePatterns`，自定义规则同样走 gitignore 语法）、
- * 按需读取各级目录 `.gitignore`（目录级缓存，变更列表中命中 `.gitignore` 时失效重读）、
+ * 匹配逻辑复用统一引擎 [GitignoreRules]（合并自 `@` 文件补全 matcher 与同步侧规则，一套解析/求值）。
+ * 这里只负责：读工作区配置（`enableGitignore` + `customIgnorePatterns`；自定义规则拆项后同样走
+ * gitignore 语法，且最后求值、可覆盖任意层级 .gitignore）、按需读取各级目录 `.gitignore`
+ * （目录级缓存，变更列表中命中 `.gitignore` 时失效重读）、
  * 以及向 [WorkspaceChangeScanner] 提供「全树 .gitignore 发现」与 find 剪枝 glob。
  *
- * 语义要点：目录被忽略即整棵子树不可见（git 不进入被排除目录）；子目录 .gitignore 覆盖父目录（last-match-wins）。
+ * 语义要点：目录被忽略即整棵子树不可见（git 不进入被排除目录）；子目录 .gitignore 覆盖父目录；
+ * 自定义规则优先级最高（忽略与 `!` 保留都压过 .gitignore）。
  */
 class WorkspaceChangeIgnoreFilter internal constructor(
     private val loadConfig: suspend (workspaceId: String) -> WorkspaceIgnoreConfig?,
@@ -52,7 +55,7 @@ class WorkspaceChangeIgnoreFilter internal constructor(
 
         // matcher 缓存
         @Volatile
-        var matcher: WorkspaceIgnoreMatcher? = null
+        var matcher: GitignoreRules? = null
 
         @Volatile
         var matcherFingerprint: String = ""
@@ -176,32 +179,25 @@ class WorkspaceChangeIgnoreFilter internal constructor(
         }
     }
 
-    /** 用当前内容/配置重建 matcher（有缓存指纹） */
-    private fun matcherOf(s: WorkspaceState): WorkspaceIgnoreMatcher {
+    /** 用当前内容/配置重建引擎（有缓存指纹）；自定义规则由构造解析（最后求值），.gitignore 内容按需叠加 */
+    private fun matcherOf(s: WorkspaceState): GitignoreRules {
         val fp = s.fingerprint()
         val cached = s.matcher
         if (cached != null && s.matcherFingerprint == fp) return cached
 
-        var matcher = WorkspaceIgnoreMatcher(includeDefaults = false)
+        var engine = GitignoreRules(s.enableGitignore, s.customPatterns)
         if (s.enableGitignore) {
-            s.dirContents[""]?.takeIf { it.isNotBlank() }?.let { matcher = matcher.withGitignore("", it) }
-            if (s.customPatterns.isNotBlank()) {
-                matcher = matcher.withGitignore("", s.customPatterns)
-            }
+            s.dirContents[""]?.takeIf { it.isNotBlank() }?.let { engine = engine.withGitignore("", it) }
             s.dirContents.keys
                 .filter { it.isNotEmpty() }
                 .sortedWith(compareBy({ it.count { ch -> ch == '/' } }, { it }))
                 .forEach { dir ->
-                    s.dirContents[dir]?.takeIf { it.isNotBlank() }?.let { matcher = matcher.withGitignore(dir, it) }
+                    s.dirContents[dir]?.takeIf { it.isNotBlank() }?.let { engine = engine.withGitignore(dir, it) }
                 }
-        } else {
-            if (s.customPatterns.isNotBlank()) {
-                matcher = matcher.withGitignore("", s.customPatterns)
-            }
         }
-        s.matcher = matcher
+        s.matcher = engine
         s.matcherFingerprint = fp
-        return matcher
+        return engine
     }
 
     companion object {

@@ -139,7 +139,7 @@ class WorkspaceChangeIgnoreFilterTest {
         )
         filter.filter("ws-1", listOf("/workspace/a/build/x.txt"))
         custom = "a/build/"
-        // 自定义规则追加在根 .gitignore 之后、子目录规则之前；此处 a/build/ 直接命中目录
+        // 自定义规则优先级最高（最后求值）；此处 a/build/ 直接命中目录
         val kept = filter.filter("ws-1", listOf("/workspace/a/build/x.txt"))
         assertEquals(emptyList<String>(), kept)
     }
@@ -181,5 +181,45 @@ class WorkspaceChangeIgnoreFilterTest {
         )
         // app/.gitignore 的 ! 只作用于 app 子树
         assertEquals(listOf("/workspace/app/special.log"), kept)
+    }
+
+    @Test
+    fun `root gitignore change invalidates cache within window`() = runBlocking {
+        val files = FakeFiles().apply {
+            contents[".gitignore"] = "old.log\n"
+        }
+        val filter = newFilter(files)
+        filter.recordScan("ws-1", listOf("/workspace/.gitignore"), emptyList())
+        // 规则生效：old.log 被过滤
+        assertEquals(emptyList<String>(), filter.filter("ws-1", listOf("/workspace/old.log")))
+
+        // 窗口内根 .gitignore 被改写为空：缓存应立即失效并重读，old.log 恢复可见
+        files.contents[".gitignore"] = ""
+        val kept = filter.recordScan(
+            "ws-1",
+            discoveryPaths = null,
+            changedRaw = listOf("/workspace/.gitignore", "/workspace/old.log"),
+        )
+        assertEquals(listOf("/workspace/.gitignore", "/workspace/old.log"), kept)
+    }
+
+    @Test
+    fun `custom comma separated rules and top priority override gitignore`() = runBlocking {
+        val files = FakeFiles().apply {
+            contents[".gitignore"] = "build/"
+            contents["app/.gitignore"] = "!special.log"
+        }
+        // 自定义：!build/ 重包含整个 build 目录；special.log 压过 app/.gitignore 的重包含；*.tmp 任意层级排除
+        val filter = newFilter(files, custom = "!build/, special.log, *.tmp")
+        val kept = filter.filter(
+            "ws-1",
+            listOf(
+                "/workspace/build/keep.txt",          // 被自定义 !build/ 重包含 → 保留
+                "/workspace/app/special.log",         // 自定义 special.log 压过子目录 !special.log → 排除
+                "/workspace/x.tmp",                   // 自定义 *.tmp → 排除
+                "/workspace/src/Main.kt",
+            ),
+        )
+        assertEquals(listOf("/workspace/build/keep.txt", "/workspace/src/Main.kt"), kept)
     }
 }

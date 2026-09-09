@@ -33,8 +33,8 @@ import me.rerere.rikkahub.data.sync.SyncStage
 import me.rerere.rikkahub.data.sync.SyncStageException
 import me.rerere.rikkahub.data.sync.WorkspaceSyncException
 import me.rerere.rikkahub.data.sync.WorkspaceSyncFailureReason
-import me.rerere.rikkahub.data.sync.WorkspaceIgnoreRules
 import me.rerere.rikkahub.data.sync.WorkspaceSyncEngine
+import me.rerere.rikkahub.data.workspace.GitignoreRules
 import me.rerere.workspace.RootfsInstallProgress
 import me.rerere.workspace.RootfsInstallStage
 import me.rerere.workspace.WorkspaceFileEntry
@@ -87,11 +87,11 @@ class WorkspaceDetailVM(
     private var syncJob: Job? = null
 
     /** 预览阶段构建并保留的排除规则 / DocumentFile 缓存，供确认执行时复用 */
-    private var syncRules: WorkspaceIgnoreRules? = null
+    private var syncRules: GitignoreRules? = null
     private var syncDocCache: DocumentCache? = null
 
     /** 覆盖导入：预览阶段构建并保留的规则 / 缓存 / 待确认上下文 */
-    private var importRules: WorkspaceIgnoreRules? = null
+    private var importRules: GitignoreRules? = null
     private var importDocCache: DocumentCache? = null
     private var pendingImport: PendingImport? = null
     private var pendingFileImport: PendingFileImport? = null
@@ -327,7 +327,7 @@ class WorkspaceDetailVM(
                 val rootDoc = DocumentFile.fromTreeUri(context, treeUri)
                     ?: error(appContext.getString(R.string.workspace_error_cannot_access_dir))
                 val rootName = rootDoc.name ?: "imported"
-                val rules = WorkspaceIgnoreRules(enableGitignore, customIgnorePatterns)
+                val rules = GitignoreRules(enableGitignore, customIgnorePatterns)
 
                 val targetPath = if (destPath.isBlank()) rootName else "$destPath/$rootName"
                 val conflictExists = repository.fileExists(id, area, targetPath)
@@ -433,7 +433,7 @@ class WorkspaceDetailVM(
             runCatching {
                 val rootDoc = DocumentFile.fromTreeUri(context, pending.treeUri)
                     ?: error(appContext.getString(R.string.workspace_error_cannot_access_dir))
-                val rules = importRules ?: WorkspaceIgnoreRules(
+                val rules = importRules ?: GitignoreRules(
                     repository.getById(id)?.enableGitignore ?: true,
                     repository.getById(id)?.customIgnorePatterns ?: "",
                 )
@@ -511,7 +511,7 @@ class WorkspaceDetailVM(
                 repository.deleteFile(id, pending.area, targetPath, recursive = false)
                 val rootDoc = DocumentFile.fromTreeUri(context, pending.treeUri)
                     ?: error(appContext.getString(R.string.workspace_error_cannot_access_dir))
-                val rules = importRules ?: WorkspaceIgnoreRules(true, "")
+                val rules = importRules ?: GitignoreRules(true, "")
                 importTree(context, rootDoc, pending.rootName, pending.destPath, pending.area, rules, registerSnapshot = true)
             }.onFailure { error ->
                 _state.update {
@@ -585,7 +585,7 @@ class WorkspaceDetailVM(
         destRootName: String,
         destPath: String,
         area: WorkspaceStorageArea,
-        rules: WorkspaceIgnoreRules,
+        rules: GitignoreRules,
         registerSnapshot: Boolean,
     ) {
         _state.update { it.copy(importProgress = 0 to -1) }
@@ -711,7 +711,7 @@ class WorkspaceDetailVM(
         rootName: String,
         destPath: String,
         area: WorkspaceStorageArea,
-        rules: WorkspaceIgnoreRules,
+        rules: GitignoreRules,
         docCache: DocumentCache,
     ): List<SyncPreviewItem> {
         val areaDir = repository.workspaceAreaDir(id, area) ?: error(appContext.getString(R.string.workspace_error_area_dir_unavailable))
@@ -745,10 +745,8 @@ class WorkspaceDetailVM(
         return WorkspaceSyncEngine.computePreview(
             context = context,
             rootDoc = rootDoc,
-            internal = local.files,
-            external = source.files,
-            internalDirs = local.emptyDirs,
-            externalDirs = source.emptyDirs,
+            internalScan = local,
+            externalScan = source,
             mode = SyncCheckMode.ACCURATE,
             docCache = docCache,
             onHashProgress = { done, total ->
@@ -765,7 +763,7 @@ class WorkspaceDetailVM(
         rootName: String,
         destPath: String,
         area: WorkspaceStorageArea,
-        rules: WorkspaceIgnoreRules,
+        rules: GitignoreRules,
         docCache: DocumentCache,
         preview: List<SyncPreviewItem>,
     ) {
@@ -901,7 +899,7 @@ class WorkspaceDetailVM(
 
             // 排除规则复用：与导入完全一致（.gitignore 从外部目录加载 + 自定义模式）
             val mode = SyncCheckMode.from(workspace.syncCheckMode)
-            val rules = WorkspaceIgnoreRules(workspace.enableGitignore, workspace.customIgnorePatterns)
+            val rules = GitignoreRules(workspace.enableGitignore, workspace.customIgnorePatterns)
             val docCache = DocumentCache()
             syncRules = rules
             syncDocCache = docCache
@@ -968,10 +966,8 @@ class WorkspaceDetailVM(
                     WorkspaceSyncEngine.computePreview(
                         context = context,
                         rootDoc = rootDoc,
-                        internal = internal.files,
-                        external = external.files,
-                        internalDirs = internal.emptyDirs,
-                        externalDirs = external.emptyDirs,
+                        internalScan = internal,
+                        externalScan = external,
                         mode = mode,
                         docCache = docCache,
                         onHashProgress = { done, total ->
@@ -1050,7 +1046,7 @@ class WorkspaceDetailVM(
                 // 复用预览阶段的排除规则与 DocumentFile 缓存（SAF 定位降为 O(1)）；
                 // 规则丢失（进程重建等）时兜底重建并加载 .gitignore
                 val rules = syncRules
-                    ?: WorkspaceIgnoreRules(workspace.enableGitignore, workspace.customIgnorePatterns).also {
+                    ?: GitignoreRules(workspace.enableGitignore, workspace.customIgnorePatterns).also {
                         WorkspaceSyncEngine.loadGitignoreTree(context, rootDoc, it, syncDocCache)
                     }
                 val filesDir = repository.workspaceFilesDir(id) ?: error(appContext.getString(R.string.workspace_dir_export_files_dir_unavailable))
@@ -1304,7 +1300,7 @@ class WorkspaceDetailVM(
                     ?: error(appContext.getString(R.string.workspace_dir_export_workspace_missing))
                 val filesDir = repository.workspaceFilesDir(id)
                     ?: error(appContext.getString(R.string.workspace_dir_export_files_dir_unavailable))
-                val rules = WorkspaceIgnoreRules(
+                val rules = GitignoreRules(
                     workspace.enableGitignore,
                     workspace.customIgnorePatterns,
                 )

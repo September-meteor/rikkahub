@@ -5,8 +5,8 @@ import kotlinx.coroutines.CancellationException
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.File02
 import me.rerere.hugeicons.stroke.Folder01
-import me.rerere.rikkahub.data.ai.workspace.WorkspaceIgnoreMatcher
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
+import me.rerere.rikkahub.data.workspace.GitignoreRules
 import me.rerere.workspace.WorkspaceFileEntry
 import me.rerere.workspace.WorkspaceStorageArea
 import kotlin.math.max
@@ -67,7 +67,7 @@ class WorkspaceCompletionProvider(
         val queue = ArrayDeque<String>()
         val seenDirs = mutableSetOf<String>()
         val seenEntries = mutableSetOf<String>()
-        val matcherCache = mutableMapOf<String, WorkspaceIgnoreMatcher>()
+        val matcherCache = mutableMapOf<String, GitignoreRules>()
         if (relativeCwd.isNotBlank()) {
             queue.add(relativeCwd)
             seenDirs += relativeCwd
@@ -111,12 +111,12 @@ class WorkspaceCompletionProvider(
 
     private suspend fun matcherForDirectory(
         directory: String,
-        cache: MutableMap<String, WorkspaceIgnoreMatcher>,
-    ): WorkspaceIgnoreMatcher {
+        cache: MutableMap<String, GitignoreRules>,
+    ): GitignoreRules {
         val normalized = directory.toWorkspaceRelativePath()
         cache[normalized]?.let { return it }
 
-        var matcher = WorkspaceIgnoreMatcher()
+        var matcher = GitignoreRules(enableGitignore = true, customIgnorePatterns = "", includeDefaults = true)
         directoryAncestors(normalized).forEach { path ->
             cache[path]?.let {
                 matcher = it
