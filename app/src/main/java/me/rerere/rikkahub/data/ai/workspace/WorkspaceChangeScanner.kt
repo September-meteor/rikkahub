@@ -36,6 +36,11 @@ import java.util.concurrent.ConcurrentHashMap
  * - 生成结束后调用 [consume] 取回最终快照，由 ChatService 回填到对话消息；
  *   consume 无论是否超时都会闭合窗口（递增 [ScanWindowState.windowEpoch] 并清残留状态），
  *   防止下一轮窗口混入上一回合的变更。
+ * - **忽略过滤与剪枝**：find 结果交给 [WorkspaceChangeIgnoreFilter] 过滤，
+ *   被 .gitignore / 自定义规则忽略的路径不进入实时列表与回填 metadata；过滤器同时产出
+ *   「find 剪枝 glob」，让 find 在遍历阶段就跳过被忽略的目录（如 build/、node_modules/），
+ *   缓解本地编译产物拖慢全树扫描的问题。剪枝为保守策略（只剪「目录级命中且无否定」的规则），
+ *   宁可少剪不错剪，漏剪部分由过滤兜底。
  *
  * 追踪键为 (conversationId, root)：同一工作区被多个对话共享时，各对话只拿到自己
  * 修改的文件，互不串扰。
@@ -43,6 +48,7 @@ import java.util.concurrent.ConcurrentHashMap
 class WorkspaceChangeScanner(
     private val workspaceRepository: WorkspaceRepository,
     private val appScope: AppScope,
+    private val ignoreFilter: WorkspaceChangeIgnoreFilter,
 ) {
     /** 追踪键：对话 + 工作区，保证同一工作区在多对话间隔离 */
     data class ScanKey(
@@ -53,6 +59,7 @@ class WorkspaceChangeScanner(
     companion object {
         private const val TAG = "WorkspaceChangeScanner"
         private const val SCAN_OUT_FILE = "/tmp/.ws_scan_out"
+        private const val GI_OUT_FILE = "/tmp/.ws_gi_out"
         // 慢设备上全树 find 可达 4~7s, 加上 executeCommand 起 proot 进程的开销单次可能 8~10s,
         // 60s 容易在极端情况下误杀, 放宽到 120s
         private const val SCAN_TIMEOUT_MS = 120_000L
@@ -131,6 +138,8 @@ class WorkspaceChangeScanner(
         val result = window.accumulated.remove(key)?.toList() ?: emptyList()
         window.pendingMin.remove(key)
         window.windowStart.remove(key)
+        // 窗口关闭: 剪枝知识可能过期（.gitignore 可能被删除/改动），下轮窗口首扫做一次全量刷新
+        ignoreFilter.markDiscoveryDirty(key.root)
         // 生成结束: 实时流让位给回填到消息 metadata 的持久展示
         _liveChanges.update { it - key }
         Log.i(
@@ -158,13 +167,16 @@ class WorkspaceChangeScanner(
         }
     }
 
-    /** 执行一次 find，返回该基准之后仍存在的文件；失败返回 null（调用方保留上一快照） */
+    /** 执行一次 find，返回该基准之后仍存在、且未被忽略规则过滤的文件；失败返回 null（调用方保留上一快照） */
     private suspend fun runFindOnce(key: ScanKey, cutoffMillis: Long): List<String>? {
         val start = System.currentTimeMillis()
+        // 剪枝知识过期/未建立时，本轮顺带做一次全树 .gitignore 发现（此时 find 不剪枝，保证结果正确）
+        val discovery = ignoreFilter.needsDiscovery(key.root)
+        val pruneGlobs = ignoreFilter.pruneGlobs(key.root)
         val result = runCatching {
             workspaceRepository.executeCommand(
                 id = key.root,
-                command = buildScanCommand(cutoffMillis),
+                command = buildScanCommand(cutoffMillis, discovery, pruneGlobs),
                 timeoutMillis = SCAN_TIMEOUT_MS,
             )
         }.getOrNull()
@@ -173,25 +185,51 @@ class WorkspaceChangeScanner(
             Log.w(TAG, "find failed key=$key cutoff=$cutoffMillis exit=${result?.exitCode} timedOut=${result?.timedOut}")
             return null
         }
-        // 变更路径写入 rootfs /tmp 的 out 文件, Java 侧直读, 不再额外开 shell
-        val paths = readScanOutput(key.root)
-        Log.i(TAG, "find key=$key cutoff=$cutoffMillis files=${paths.size} tookMs=${System.currentTimeMillis() - start}")
-        return paths
+        // 变更路径与 .gitignore 清单分别写入 rootfs /tmp 的 out 文件, Java 侧直读, 不再额外开 shell
+        val rawPaths = readOutFile(key.root, SCAN_OUT_FILE)
+        val giPaths = if (discovery) readOutFile(key.root, GI_OUT_FILE) else null
+        // 更新忽略知识（发现结果 + 本轮被修改的 .gitignore）并过滤
+        val filtered = ignoreFilter.recordScan(key.root, giPaths, rawPaths)
+        Log.i(
+            TAG,
+            "find key=$key cutoff=$cutoffMillis raw=${rawPaths.size} kept=${filtered.size} " +
+                "discovery=$discovery prune=${pruneGlobs.size} tookMs=${System.currentTimeMillis() - start}"
+        )
+        return filtered
     }
 
-    private fun buildScanCommand(cutoffMillis: Long): String = buildString {
-        // -newermt "@秒" 在 GNU find 中含边界秒（同一秒内写入的文件也会命中），
-        // 且 cutoff 早于命令写入时间, 因此不会漏掉同秒晚于 cutoff 的变更。
+    /**
+     * 组装一次扫描的 shell 命令。
+     *
+     * @param discovery true 时先做一次全树 .gitignore 发现（此时不剪枝，保证发现覆盖整树）
+     * @param pruneGlobs 保守的剪枝 glob（绝对路径，如 /workspace/rikkahub/build）；为空则不剪枝
+     */
+    private fun buildScanCommand(cutoffMillis: Long, discovery: Boolean, pruneGlobs: List<String>): String = buildString {
         // 仅在 /tmp 缺失时才创建（避免无脑 mkdir）
-        append("[ -d /tmp ] || mkdir -p /tmp && find /workspace -type f -newermt \"@${cutoffMillis / 1000}\"")
+        append("[ -d /tmp ] || mkdir -p /tmp\n")
+        if (discovery) {
+            // 全树 .gitignore 清单（不剪枝，仅文件名匹配，不 stat 全部文件）
+            append("find /workspace -type f -name .gitignore -print")
+            append(" > ${GI_OUT_FILE.shellQuote()} 2>/dev/null\n")
+        }
+        // 主扫描：-newermt "@秒" 在 GNU find 中含边界秒（同一秒内写入的文件也会命中），
+        // 且 cutoff 早于命令写入时间, 因此不会漏掉同秒晚于 cutoff 的变更。
+        append("find /workspace ")
+        if (pruneGlobs.isNotEmpty()) {
+            // 目录级忽略剪枝：整棵跳过被忽略目录（保守策略，见 WorkspaceChangeIgnoreFilter.pruneGlobs）
+            append("-type d \\\\( ")
+            append(pruneGlobs.joinToString(" -o ") { "-path ${it.shellQuote()}" })
+            append(" \\\\) -prune -o ")
+        }
+        append("-type f -newermt \\\"@${cutoffMillis / 1000}\\\" -print")
         append(" > ${SCAN_OUT_FILE.shellQuote()} 2>/dev/null\n")
     }
 
-    private suspend fun readScanOutput(root: String): List<String> = runCatching {
-        val size = workspaceRepository.rootfsFileSize(root, SCAN_OUT_FILE)
+    private suspend fun readOutFile(root: String, file: String): List<String> = runCatching {
+        val size = workspaceRepository.rootfsFileSize(root, file)
         if (size <= 0L) return@runCatching emptyList()
         ByteArrayOutputStream(size.coerceAtMost(MAX_SCAN_OUT_BYTES.toLong()).toInt()).use { out ->
-            workspaceRepository.exportRootfsFile(root, SCAN_OUT_FILE, out)
+            workspaceRepository.exportRootfsFile(root, file, out)
             out.toString(Charsets.UTF_8.name()).lineSequence()
                 .map { it.trim() }
                 .filter { it.isNotEmpty() && it.startsWith("/workspace") }

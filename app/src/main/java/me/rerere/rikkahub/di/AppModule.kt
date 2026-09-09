@@ -7,6 +7,7 @@ import kotlinx.serialization.json.Json
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.ai.tools.local.LocalTools
 import me.rerere.rikkahub.data.ai.tools.ChatToolFactory
+import me.rerere.rikkahub.data.ai.workspace.WorkspaceChangeIgnoreFilter
 import me.rerere.rikkahub.data.ai.workspace.WorkspaceChangeScanner
 import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.service.ChatNotificationManager
@@ -45,9 +46,14 @@ val appModule = module {
     }
 
     single {
+        WorkspaceChangeIgnoreFilter.fromRepository(get())
+    }
+
+    single {
         WorkspaceChangeScanner(
             workspaceRepository = get(),
             appScope = get(),
+            ignoreFilter = get(),
         )
     }
 

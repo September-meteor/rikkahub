@@ -32,6 +32,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -81,6 +82,7 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.data.model.replaceRegexes
+import me.rerere.rikkahub.data.ai.workspace.WorkspaceChangeIgnoreFilter
 import me.rerere.rikkahub.data.ai.workspace.WorkspaceChangeScanner
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.ui.components.richtext.ZoomableAsyncImage
@@ -157,6 +159,19 @@ fun ChatMessage(
         (extractEditedFilesPaths(message.parts) + liveForThisMessage)
             .filter { it.startsWith("/workspace") }
             .distinct()
+    }
+    // 展示总闸：按当前 .gitignore / 自定义规则再过滤一次，覆盖三个来源
+    // （write/edit 入参、历史 metadata、实时流——实时流已在扫描器源头过滤过，这里主要兜底前两者）。
+    // 规则读取为异步 IO（目录级 .gitignore + 工作区配置），期间沿用原始列表，避免内容闪烁。
+    val workspaceChangeIgnoreFilter: WorkspaceChangeIgnoreFilter = koinInject()
+    val workspaceIdForFilter = assistant?.workspaceId?.toString()
+    val editedFilesFiltered by produceState(
+        initialValue = editedFiles,
+        workspaceIdForFilter,
+        editedFiles,
+        message,
+    ) {
+        value = workspaceIdForFilter?.let { workspaceChangeIgnoreFilter.filter(it, editedFiles) } ?: editedFiles
     }
     val hasEditedFiles = editedFiles.isNotEmpty()
     val navController = LocalNavController.current
@@ -294,7 +309,7 @@ fun ChatMessage(
         }
 
         EditedFilesList(
-            editedFiles = editedFiles,
+            editedFiles = editedFilesFiltered,
             assistant = assistant,
             showFullPath = showFullPath,
         )
