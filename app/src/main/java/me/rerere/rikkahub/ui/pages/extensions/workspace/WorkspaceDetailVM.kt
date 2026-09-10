@@ -95,6 +95,12 @@ class WorkspaceDetailVM(
     private var importDocCache: DocumentCache? = null
     private var pendingImport: PendingImport? = null
     private var pendingFileImport: PendingFileImport? = null
+    private val _settingsError = MutableStateFlow<String?>(null)
+    val settingsError = _settingsError.asStateFlow()
+
+    fun dismissSettingsError() {
+        _settingsError.value = null
+    }
 
     init {
         loadWorkspace()
@@ -1389,6 +1395,19 @@ class WorkspaceDetailVM(
         return "$name ($n)"
     }
 
+    fun setShellCompatibilityMode(enabled: Boolean) {
+        viewModelScope.launch {
+            try {
+                repository.setShellCompatibilityMode(id, enabled)
+                val workspace = repository.getById(id)
+                _state.update { it.copy(workspace = workspace) }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                _settingsError.value = error.message.orEmpty()
+            }
+        }
+    }
     fun setToolApproval(toolName: String, needsApproval: Boolean) {
         viewModelScope.launch {
             val workspace = repository.getById(id) ?: return@launch

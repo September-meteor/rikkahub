@@ -27,6 +27,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,6 +44,8 @@ import me.rerere.rikkahub.data.repository.BinaryPreviewException
 import me.rerere.rikkahub.data.repository.OversizePreviewException
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.webview.WebView
+import me.rerere.rikkahub.ui.components.webview.rememberWebViewState
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
@@ -72,6 +75,9 @@ fun WorkspaceFileEditorPage(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val fileName = path.substringAfterLast('/').ifBlank { path }
+    val extension = fileName.substringAfterLast('.', "").lowercase()
+    val supportsPreview = extension in setOf("html", "htm", "svg")
+    var showPreview by rememberSaveable(id, area, path) { mutableStateOf(supportsPreview) }
 
     val textState = rememberTextFieldState()
     var loading by remember { mutableStateOf(true) }
@@ -148,6 +154,11 @@ fun WorkspaceFileEditorPage(
                 },
                 navigationIcon = { BackButton() },
                 actions = {
+                    if (supportsPreview && !loading && loadError == null) {
+                        TextButton(onClick = { showPreview = !showPreview }) {
+                            Text(if (showPreview) "源码" else "预览")
+                        }
+                    }
                     if (editable && !loading && loadError == null) {
                         TextButton(
                             onClick = {
@@ -215,6 +226,12 @@ fun WorkspaceFileEditorPage(
                 }
             }
 
+            showPreview -> WorkspaceWebPreview(
+                content = textState.text.toString(),
+                isSvg = extension == "svg",
+                modifier = Modifier.fillMaxSize().padding(innerPadding),
+            )
+
             else -> TextField(
                 state = textState,
                 modifier = Modifier
@@ -231,4 +248,26 @@ fun WorkspaceFileEditorPage(
             )
         }
     }
+}
+
+@Composable
+private fun WorkspaceWebPreview(
+    content: String,
+    isSvg: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val state = rememberWebViewState(
+        data = content,
+        baseUrl = "https://workspace-preview.invalid/",
+        mimeType = if (isSvg) "image/svg+xml" else "text/html",
+        settings = {
+            allowFileAccess = false
+            allowContentAccess = false
+            builtInZoomControls = true
+            displayZoomControls = false
+            useWideViewPort = true
+            loadWithOverviewMode = true
+        },
+    )
+    WebView(state = state, modifier = modifier)
 }

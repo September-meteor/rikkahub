@@ -202,11 +202,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
         } else {
             null
         },
-        onClick = if (context.content != null || isPending || images.isNotEmpty()) {
-            { showResult = true }
-        } else {
-            null
-        },
+        onClick = { showResult = true },
         content = if (hasExtraContent) {
             {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -351,91 +347,52 @@ private fun ChainOfThoughtScope.AskUserToolStep(
                         }
 
                         if (isPending && onToolAnswer != null) {
-                            when (q.selectionType) {
-                                "single" -> {
-                                    // Single select: chips only, no text input
-                                    if (q.options.isNotEmpty()) {
-                                        FlowRow(
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                                        ) {
-                                            q.options.forEach { option ->
-                                                FilterChip(
-                                                    selected = answers[q.id] == option,
-                                                    onClick = { answers[q.id] = option },
-                                                    label = {
-                                                        Text(
-                                                            text = option,
-                                                            style = MaterialTheme.typography.labelSmall,
-                                                        )
-                                                    },
+                            if (q.options.isNotEmpty()) {
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                ) {
+                                    q.options.forEach { option ->
+                                        val selectedOptions = multiAnswers[q.id] ?: emptySet()
+                                        FilterChip(
+                                            selected = if (q.selectionType == "multi") {
+                                                option in selectedOptions
+                                            } else {
+                                                answers[q.id] == option
+                                            },
+                                            onClick = {
+                                                if (q.selectionType == "multi") {
+                                                    multiAnswers[q.id] = if (option in selectedOptions) {
+                                                        selectedOptions - option
+                                                    } else {
+                                                        selectedOptions + option
+                                                    }
+                                                } else {
+                                                    answerState.setTextAndPlaceCursorAtEnd(option)
+                                                }
+                                            },
+                                            label = {
+                                                Text(
+                                                    text = option,
+                                                    style = MaterialTheme.typography.labelSmall,
                                                 )
-                                            }
-                                        }
+                                            },
+                                        )
                                     }
-                                }
-                                "multi" -> {
-                                    // Multi select: chips only, multiple can be selected
-                                    if (q.options.isNotEmpty()) {
-                                        FlowRow(
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                                        ) {
-                                            q.options.forEach { option ->
-                                                val selectedSet = multiAnswers[q.id] ?: emptySet()
-                                                FilterChip(
-                                                    selected = selectedSet.contains(option),
-                                                    onClick = {
-                                                        val current = selectedSet.toMutableSet()
-                                                        if (current.contains(option)) current.remove(option)
-                                                        else current.add(option)
-                                                        multiAnswers[q.id] = current
-                                                    },
-                                                    label = {
-                                                        Text(
-                                                            text = option,
-                                                            style = MaterialTheme.typography.labelSmall,
-                                                        )
-                                                    },
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                                else -> {
-                                    // Text (default): optional option chips + free text input
-                                    if (q.options.isNotEmpty()) {
-                                        FlowRow(
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                                        ) {
-                                            q.options.forEach { option ->
-                                                FilterChip(
-                                                    selected = answers[q.id] == option,
-                                                    onClick = { answerState.setTextAndPlaceCursorAtEnd(option) },
-                                                    label = {
-                                                        Text(
-                                                            text = option,
-                                                            style = MaterialTheme.typography.labelSmall,
-                                                        )
-                                                    },
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                    // Free text input（TextFieldState：智能配对符号可正常输入，光标稳定）
-                                    OutlinedTextField(
-                                        state = answerState,
-                                        modifier = Modifier.fillMaxWidth(),
-                                        textStyle = MaterialTheme.typography.bodySmall,
-                                        lineLimits = TextFieldLineLimits.MultiLine(
-                                            minHeightInLines = 1,
-                                            maxHeightInLines = 3,
-                                        ),
-                                    )
                                 }
                             }
+
+                            // 自由文本输入对所有类型开放（含 single/multi）：
+                            // single/text 点选选项会填入输入框、可继续编辑为自定义回复；multi 的文本作为补充项随 chips 一并提交。
+                            OutlinedTextField(
+                                state = answerState,
+                                modifier = Modifier.fillMaxWidth(),
+                                textStyle = MaterialTheme.typography.bodySmall,
+                                lineLimits = TextFieldLineLimits.MultiLine(
+                                    minHeightInLines = 1,
+                                    maxHeightInLines = 3,
+                                ),
+                            )
                         } else if (isAnswered) {
                             // Show the user's answer
                             val answeredState = tool.approvalState as ToolApprovalState.Answered
@@ -462,7 +419,11 @@ private fun ChainOfThoughtScope.AskUserToolStep(
                                 put("answers", buildJsonObject {
                                     questions.forEach { q ->
                                         when (q.selectionType) {
-                                            "multi" -> put(q.id, JsonPrimitive(multiAnswers[q.id]?.joinToString(", ") ?: ""))
+                                            "multi" -> put(q.id, JsonPrimitive(
+                                                (multiAnswers[q.id].orEmpty().toList() +
+                                                    listOfNotNull(answers[q.id]?.takeIf { it.isNotBlank() }))
+                                                    .joinToString(", ")
+                                            ))
                                             else -> put(q.id, JsonPrimitive(answers[q.id] ?: ""))
                                         }
                                     }
@@ -472,7 +433,7 @@ private fun ChainOfThoughtScope.AskUserToolStep(
                         },
                         enabled = questions.all { q ->
                             when (q.selectionType) {
-                                "multi" -> !multiAnswers[q.id].isNullOrEmpty()
+                                "multi" -> !multiAnswers[q.id].isNullOrEmpty() || !answers[q.id].isNullOrBlank()
                                 else -> !answers[q.id].isNullOrBlank()
                             }
                         },

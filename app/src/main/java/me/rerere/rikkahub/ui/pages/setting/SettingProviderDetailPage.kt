@@ -326,7 +326,8 @@ private fun SettingProviderConfigPage(
 
             Button(
                 onClick = {
-                    onEdit(internalProvider)
+                    val providerToSave: ProviderSetting = internalProvider
+                    onEdit(providerToSave.copyProvider(name = providerToSave.name.trim()))
                 }
             ) {
                 Text(stringResource(R.string.setting_provider_page_save))
@@ -704,7 +705,9 @@ private fun AddModelButton(
     parentProvider: ProviderSetting,
     onUpdateProvider: (ProviderSetting) -> Unit
 ) {
-    val dialogState = useEditState<Model> { onAddModel(it) }
+    val dialogState = useEditState<Model> {
+        onAddModel(it.copy(displayName = it.displayName.trim()))
+    }
     val scope = rememberCoroutineScope()
 
     Row(
@@ -1184,7 +1187,7 @@ private fun ModelCard(
     parentProvider: ProviderSetting
 ) {
     val dialogState = useEditState<Model> {
-        onEdit(it)
+        onEdit(it.copy(displayName = it.displayName.trim()))
     }
     val swipeToDismissBoxState = rememberSwipeToDismissBoxState()
     val scope = rememberCoroutineScope()
@@ -1577,7 +1580,7 @@ private fun ProviderOverrideSettings(
                         }
                         TextButton(
                             onClick = {
-                                onUpdateProviderOverride(internalProvider)
+                                onUpdateProviderOverride(internalProvider.copyProvider(name = internalProvider.name.trim()))
                                 showProviderConfig = false
                                 editingProvider = null
                             },

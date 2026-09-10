@@ -59,6 +59,9 @@ data class WorkspaceEntity(
     // 导入遇到同名文件/目录时的默认行为（"rename" 创建副本 / "overwrite" 覆盖并同步删除多余内容）
     @ColumnInfo("import_conflict_mode", defaultValue = "rename")
     val importConflictMode: String = "rename",
+    // 上游: Shell 兼容模式（PROOT_NO_SECCOMP），解决部分设备上 seccomp 导致的命令异常
+    @ColumnInfo("shell_compatibility_mode", defaultValue = "0")
+    val shellCompatibilityMode: Boolean = false,
 ) {
     fun toolApprovalOverrides(): Map<String, Boolean> = runCatching {
         JsonInstant.decodeFromString<Map<String, Boolean>>(toolApprovals)

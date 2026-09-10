@@ -41,9 +41,9 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.compose.foundation.combinedClickable
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.hugeicons.HugeIcons
@@ -74,7 +74,8 @@ internal fun extractEditedFilesPaths(parts: List<UIMessagePart>): List<String> =
             .flatMap { tool ->
                 when (tool.toolName) {
                     "workspace_write_file", "workspace_edit_file" -> {
-                        tool.inputAsJson().jsonObject["path"]?.jsonPrimitive?.contentOrNull
+                        // 兼容入参非 JSON 对象的情况（上游 dee88dca 防崩溃写法）
+                        (tool.inputAsJson() as? JsonObject)?.get("path")?.jsonPrimitive?.contentOrNull
                             ?.let { listOf(it) }
                             ?: emptyList()
                     }
